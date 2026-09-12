@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const {
   createWorkout,
   splitWorkoutDocument,
@@ -7,6 +9,13 @@ const {
   saveLocalWorkouts,
   mostRecentWorkout,
 } = require("../workouts.js");
+
+// The real in-page grammar: session headers are unparseable lines, so a legacy
+// multi-session document splits exactly where the parser starts a new session.
+const htmlSrc = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const grammarSlice = htmlSrc.slice(htmlSrc.indexOf("const ANGLE_LABELS"), htmlSrc.indexOf("/* ---------------- session header convention"));
+const G = new Function(grammarSlice + "; return { parseLog };")();
+const realParseLog = G.parseLog;
 
 const parseLog = (text) => {
   const sessions = [];
@@ -65,6 +74,17 @@ test("migrating legacy text writes the new collection without deleting the old t
   assert.deepStrictEqual(rows.map((row) => row.body), ["PUSH 09-11\np 135x8"]);
   assert.deepStrictEqual(JSON.parse(store.values["ironvim-workouts"]), { version: 1, workouts: rows });
   assert.strictEqual(store.values["ironvim-logs-text"], "PUSH 09-11\np 135x8");
+});
+
+test("multi-session legacy text migrates with exact headers and exercise lines", () => {
+  const text = "PUSH 09-11\np 135x8,8 \"bench day\n\nLEGS 09-12\nsq 225x5*5\nlc.l 90x12";
+  const rows = migrateLocalWorkouts(text, realParseLog, new Date("2026-09-12T12:00:00Z"));
+  assert.deepStrictEqual(rows.map((row) => row.body), [
+    "PUSH 09-11\np 135x8,8 \"bench day",
+    "LEGS 09-12\nsq 225x5*5\nlc.l 90x12",
+  ]);
+  assert.deepStrictEqual(realParseLog(rows[0].body).map((s) => s.title), ["PUSH 09-11"]);
+  assert.deepStrictEqual(realParseLog(rows[1].body).map((s) => s.title), ["LEGS 09-12"]);
 });
 
 test("saving a collection stores the versioned payload", () => {

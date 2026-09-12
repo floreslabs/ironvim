@@ -13,9 +13,11 @@ node_modules: package.json
 ## install: install the local dev dependencies (vite)
 install: node_modules
 
-## test: parser, sync state machine, and mounted-UI checks (no browser needed)
+## test: parser, workout collection + schema, sync state machine, and mounted-UI checks (no browser needed)
 test: node_modules
 	@node test/parser.test.js
+	@node test/workouts.test.js
+	@node test/migration-schema.test.js
 	@node test/sync.test.js
 	@node test/render.test.js
 

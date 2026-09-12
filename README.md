@@ -83,10 +83,10 @@ redirect configuration.
 - **iPhone:** open the URL in Safari → Share icon → "Add to Home Screen."
 - **Android:** open the URL in Chrome → ⋮ menu → "Add to Home screen" / "Install app."
 
-It'll launch full-screen without browser chrome, and your log/settings persist in the phone's local storage between visits.
+It'll launch full-screen without browser chrome, and your workouts/settings persist in the phone's local storage between visits. Each workout is stored as a separate record in the `ironvim-workouts` key; the editor edits the selected workout, and each parsed workout card has an **edit** action. Existing `ironvim-logs-text` data is migrated automatically on first load.
 
 ## Notes / limitations
-- Data is stored per-device (`localStorage`), not synced across phone/laptop. If you want cross-device sync later, that needs a small backend (e.g. a free Supabase project) — happy to wire that up if you want it.
+- Data is stored per-device (`localStorage`) and is also available for optional Supabase sync across devices. Use **+ new workout** to create a separate record; editing the textarea autosaves only the selected workout.
 - The app loads React from a CDN on first visit and caches it for offline use after that; the very first load needs a network connection.
 - Clearing your phone browser's site data / "Clear all data" will wipe your logged workouts — there's no cloud backup by default.
 
@@ -100,36 +100,37 @@ behaves exactly as it does offline.
 
 1. Create a Supabase project. Copy the project URL and the **publishable** key
    (`sb_publishable_…`) from Project Settings → API. The legacy `anon` JWT is deprecated.
-2. Apply `supabase/migrations/0001_init.sql` (dashboard SQL editor is fine). It creates the
-   `logs` table, enables RLS with per-user policies, and adds the `revision` bump trigger.
+2. Apply `supabase/migrations/20260911190000_init.sql` and then
+   `supabase/migrations/20260912150000_workouts.sql` (dashboard SQL editor is
+   fine). The second migration creates the normalized `workouts` table, enables
+   RLS with per-user CRUD policies, and adds the `revision` bump trigger. When
+   using the Supabase CLI, apply the migrations explicitly:
+
+   ```sh
+   supabase db push --include-all
+   ```
 3. Fill in `supabase-config.js`. **This file is public on purpose** — it ships in the page
    source. The security boundary is Row Level Security, not secrecy of the key. Verify RLS is
    on before deploying.
 4. Auth → Providers → Email: enable email.
-5. Auth → Email Templates → **Magic Link**: replace the body with the token, or no code is
-   ever sent:
-   ```html
-   <h2>ironvim sign-in code</h2>
-   <p>{{ .Token }}</p>
-   ```
-   Codes rather than links, because a magic link opens in Safari — outside the installed PWA.
+5. Auth → Email: enable magic-link sign-in.
 
 ### Signing in
 
-ACCOUNT panel → email → 6-digit code. Once per device; the session refreshes itself after that.
+ACCOUNT panel → email → **email sign-in link**. Once per device; the session refreshes itself after that.
 
 > Supabase's built-in email sender allows **2 emails per hour**. Mistype the code twice and you
 > wait an hour. Configure custom SMTP (e.g. Resend) to lift the cap — no client changes needed.
 
 ### Conflicts
 
-Each device tracks the `revision` its text is based on. If the cloud moved on, the push is
-rejected rather than applied, and you choose: **keep mine**, **use cloud**, or **keep both** —
-which appends the cloud copy under a `=== cloud copy … ===` marker. That marker doesn't parse
-as an exercise, so it shows up as its own session in PARSED SESSIONS, visible and editable.
-Nothing is ever silently overwritten.
+Each workout tracks the `revision` its text is based on. If the cloud moved on, only that
+workout enters conflict, and you choose: **keep mine**, **use cloud**, or **keep both**.
+The last option creates a separate local workout containing both copies. Nothing is ever
+silently overwritten.
 
 ## Tests
 
-`make test` — parser/grammar regressions, the sync state machine against a stubbed PostgREST
-client, and a jsdom mount of the real UI. No browser or network required.
+`make test` — parser/grammar regressions, workout collection + schema-migration checks, the
+sync state machine against a stubbed PostgREST client, and a jsdom mount of the real UI. No
+browser or network required.

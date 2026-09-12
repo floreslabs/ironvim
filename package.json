@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "preview": "vite preview",
-    "test": "node test/parser.test.js && node test/sync.test.js && node test/render.test.js"
+    "test": "node test/parser.test.js && node test/workouts.test.js && node test/migration-schema.test.js && node test/sync.test.js && node test/render.test.js"
   },
   "devDependencies": {
     "@babel/standalone": "^8.0.5",

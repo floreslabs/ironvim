@@ -56,6 +56,12 @@ test("retired l code still resolves to pulldown", () => {
   assert.strictEqual(label("l.w"), "Pulldown (Wide Bar)");
 });
 
+test("legacy di/e/ca codes still normalize to their current base", () => {
+  assert.strictEqual(label("di"), "Bodyweight Dip");
+  assert.strictEqual(label("e"), "Dumbbell Delt Raises");
+  assert.strictEqual(label("ca"), "Machine Calf Raise");
+});
+
 test("l-prefixed leg codes are unaffected", () => {
   assert.strictEqual(label("dl"), "Barbell Deadlift");
   assert.strictEqual(label("lp"), "Machine Leg Press");
