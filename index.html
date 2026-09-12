@@ -54,6 +54,7 @@
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"
         integrity="sha384-JBR+x8blGwjDRO63aHCGiZMD4VNiTR4ZUGA+N6ZKLf3zNt1fK8IBpcgPaMrxqWBp"></script>
 <script src="supabase-config.js"></script>
+<script src="workouts.js"></script>
 <script src="sync.js"></script>
 
 <script type="text/babel" data-presets="react">
@@ -380,7 +381,14 @@ function useSync({ local, applyRemote }) {
 }
 
 function App() {
-  const [text, setText] = useState(() => store.get("ironvim-logs-text", SAMPLE_LOG));
+  const workoutApi = window.ironvimWorkouts;
+  const [workouts, setWorkouts] = useState(() => workoutApi
+    ? workoutApi.loadLocalWorkouts(localStorage, parseLog, new Date())
+    : [{ id:"local-workout", body:SAMPLE_LOG, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), revision:null, dirty:true }]);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState(() => {
+    const stored = store.get("ironvim-selected-workout", null);
+    return stored || null;
+  });
   const [bodyweight, setBodyweight] = useState(() => store.get("ironvim-logs-bodyweight", "180"));
   const [legend, setLegend] = useState(() => {
     const raw = store.get("ironvim-logs-legend", null);
@@ -400,13 +408,24 @@ function App() {
 
   const applyRemote = useCallback((remote) => {
     skipNotify.current = true;
-    setText(remote.text == null ? "" : remote.text);
+    setWorkouts(remote.workouts || []);
     setBodyweight(remote.bodyweight == null ? "" : remote.bodyweight);
     setLegend(withDefaultLegend(remote.legend || {}));
   }, []);
 
+  const selectedWorkout = workouts.find((workout) => workout.id === selectedWorkoutId)
+    || workoutApi?.mostRecentWorkout(workouts)
+    || workouts[0]
+    || null;
+  const text = selectedWorkout ? selectedWorkout.body : "";
+
+  useEffect(() => {
+    if (!selectedWorkout && workouts.length) setSelectedWorkoutId(workouts[0].id);
+    else if (selectedWorkout && selectedWorkout.id !== selectedWorkoutId) setSelectedWorkoutId(selectedWorkout.id);
+  }, [selectedWorkout, selectedWorkoutId, workouts]);
+
   const sync = useSync({
-    local: { text, bodyweight, legend, untouched: text === SAMPLE_LOG },
+    local: { workouts, bodyweight, legend, untouched: workouts.length === 1 && workouts[0].body === SAMPLE_LOG },
     applyRemote,
   });
   const syncLabel = SYNC_LABELS[sync.status] || SYNC_LABELS["local-only"];
@@ -419,10 +438,10 @@ function App() {
   }, []);
 
   const addSession = useCallback(() => {
-    setText((prev) => {
-      const trimmed = prev.replace(/\s+$/, "");
-      return (trimmed ? trimmed + "\n\n" : "") + sessionHeader() + "\n";
-    });
+    const workout = workoutApi.createWorkout(sessionHeader() + "\n");
+    setWorkouts((prev) => [...prev, workout]);
+    setSelectedWorkoutId(workout.id);
+    store.set("ironvim-selected-workout", workout.id);
     // drop the caret at the end of the fresh header so the next line is just typing
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -431,11 +450,25 @@ function App() {
       el.setSelectionRange(el.value.length, el.value.length);
       el.scrollTop = el.scrollHeight;
     });
+  }, [workoutApi]);
+
+  const updateSelectedWorkout = useCallback((value) => {
+    if (!selectedWorkout) return;
+    setWorkouts((prev) => prev.map((workout) => workout.id === selectedWorkout.id
+      ? { ...workout, body:value, updatedAt:new Date().toISOString(), dirty:true }
+      : workout));
+  }, [selectedWorkout]);
+
+  const editWorkout = useCallback((id) => {
+    setSelectedWorkoutId(id);
+    store.set("ironvim-selected-workout", id);
+    requestAnimationFrame(() => editorRef.current?.focus());
   }, []);
 
   useEffect(() => {
     const h = setTimeout(() => {
-      store.set("ironvim-logs-text", text);
+      if (workoutApi) workoutApi.saveLocalWorkouts(localStorage, workouts);
+      if (selectedWorkout) store.set("ironvim-selected-workout", selectedWorkout.id);
       store.set("ironvim-logs-bodyweight", bodyweight);
       store.set("ironvim-logs-legend", JSON.stringify(legend));
       setSaved(true);
@@ -445,13 +478,16 @@ function App() {
       else if (window.ironvimSync) window.ironvimSync.notifyChange();
     }, 500);
     return () => clearTimeout(h);
-  }, [text, bodyweight, legend]);
+  }, [workouts, selectedWorkout, bodyweight, legend, workoutApi]);
 
-  const sessions = useMemo(() => parseLog(text), [text]);
+  const sessions = useMemo(() => workouts.map((workout) => ({
+    ...workout,
+    parsed: parseLog(workout.body),
+  })), [workouts]);
 
   const allTime = useMemo(() => {
     const map = {}; let totalVolume = 0; let totalSets = 0;
-    sessions.forEach((s) => s.entries.forEach((entry) => {
+    sessions.forEach((workout) => workout.parsed.forEach((s) => s.entries.forEach((entry) => {
       const label = describeExercise(entry, legend);
       if (!map[label]) map[label] = { maxWeight:null, volume:0, sets:0 };
       entry.sets.forEach((set) => {
@@ -463,9 +499,9 @@ function App() {
           if (map[label].maxWeight == null || w > map[label].maxWeight) map[label].maxWeight = w;
         }
       });
-    }));
+    })));
     const rows = Object.entries(map).map(([label,v]) => ({ label, ...v })).sort((a,b) => b.volume - a.volume);
-    return { rows, totalVolume, totalSets, sessionCount: sessions.length };
+    return { rows, totalVolume, totalSets, sessionCount: sessions.reduce((n, workout) => n + workout.parsed.length, 0) };
   }, [sessions, bodyweight, legend]);
   const maxRowVolume = allTime.rows.length ? allTime.rows[0].volume : 1;
 
@@ -501,14 +537,14 @@ function App() {
               className="gl-editor"
               ref={editorRef}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => updateSelectedWorkout(e.target.value)}
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
               style={{ width:"100%", minHeight:220, background:C.bg0, color:C.fg, border:`1px solid ${C.bg3}`, borderRadius:6, outline:"none", padding:12, lineHeight:1.6 }}
             />
             <div style={{ display:"flex", marginTop:10 }}>
-              <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }} onClick={addSession}>+ new session</button>
+              <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }} onClick={addSession}>+ new workout</button>
             </div>
             <div style={{ display:"flex", gap:8, marginTop:8 }}>
               <button className="gl-btn" style={{ flex:1 }} onClick={() => setShowSample(true)}>ⓘ sample</button>
@@ -520,15 +556,18 @@ function App() {
           <Panel title="PARSED SESSIONS" accent={C.blue}>
             {sessions.length === 0 && <div style={{ color:C.gray, fontSize:13 }}>No entries yet.</div>}
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              {sessions.map((session, si) => {
+              {sessions.flatMap((workout) => workout.parsed.map((session, si) => {
                 const sessionVolume = session.entries.reduce((acc, entry) => acc + entry.sets.reduce((a,set) => {
                   const w = resolveWeight(set.weightRaw, bodyweight); return a + (w != null ? w * set.reps : 0);
                 }, 0), 0);
                 return (
-                  <div key={si} style={{ border:`1px solid ${C.bg3}`, borderRadius:6, overflow:"hidden" }}>
+                  <div key={`${workout.id}-${si}`} style={{ border:`1px solid ${C.bg3}`, borderRadius:6, overflow:"hidden" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", background:C.bg2, padding:"6px 10px", borderBottom:`1px solid ${C.bg3}` }}>
                       <span style={{ color:C.orange, fontSize:13 }}>{session.title}</span>
-                      <span style={{ color:C.gray, fontSize:11.5 }}>{sessionVolume.toLocaleString()} lb</span>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ color:C.gray, fontSize:11.5 }}>{sessionVolume.toLocaleString()} lb</span>
+                        <button className="gl-btn" style={{ minHeight:30, minWidth:48, padding:"4px 8px" }} onClick={() => editWorkout(workout.id)}>edit</button>
+                      </div>
                     </div>
                     {session.entries.map((entry, ei) => (
                       <div key={ei} style={{ padding:"8px 10px", borderTop: ei===0 ? "none" : `1px solid ${C.bg3}` }}>
@@ -547,7 +586,7 @@ function App() {
                     ))}
                   </div>
                 );
-              })}
+              }))}
             </div>
           </Panel>
         </div>
@@ -670,9 +709,9 @@ function App() {
         <Modal title="SYNC CONFLICT" accent={C.red} onClose={() => {}}>
           <div style={{ color:C.gray, fontSize:12, marginBottom:10 }}>
             This device and the cloud both changed since the last sync. Nothing has been
-            overwritten yet.
+            overwritten yet. Affected workout: <span style={{ color:C.orange }}>{sync.conflict.workoutId}</span>
           </div>
-          {[["this device", sync.conflict.local.text], ["cloud copy", sync.conflict.remote.text]].map(([label, body]) => (
+          {[["this device", sync.conflict.local.body], ["cloud copy", sync.conflict.remote.body]].map(([label, body]) => (
             <div key={label} style={{ marginBottom:10 }}>
               <div style={{ color:C.orange, fontSize:11.5, marginBottom:4 }}>{label}</div>
               <pre style={{ margin:0, background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6,
@@ -682,11 +721,11 @@ function App() {
           ))}
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <button className="gl-btn" style={{ flex:1 }}
-              onClick={() => window.ironvimSync.resolveConflict("mine")}>keep mine</button>
+              onClick={() => window.ironvimSync.resolveConflict({ workoutId:sync.conflict.workoutId, choice:"mine" })}>keep mine</button>
             <button className="gl-btn" style={{ flex:1 }}
-              onClick={() => window.ironvimSync.resolveConflict("cloud")}>use cloud</button>
+              onClick={() => window.ironvimSync.resolveConflict({ workoutId:sync.conflict.workoutId, choice:"cloud" })}>use cloud</button>
             <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }}
-              onClick={() => window.ironvimSync.resolveConflict("both")}>keep both</button>
+              onClick={() => window.ironvimSync.resolveConflict({ workoutId:sync.conflict.workoutId, choice:"both" })}>keep both</button>
           </div>
         </Modal>
       )}

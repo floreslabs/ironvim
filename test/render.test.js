@@ -24,9 +24,16 @@ function mount(syncStub) {
   global.window = dom.window;
   global.document = dom.window.document;
   global.navigator = dom.window.navigator;
+  global.localStorage = dom.window.localStorage;
   global.requestAnimationFrame = (fn) => fn();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.ironvimSync = syncStub;
+  dom.window.ironvimWorkouts = {
+    createWorkout: (body) => ({ id:"local-workout", body, createdAt:"2026-09-12T00:00:00.000Z", updatedAt:"2026-09-12T00:00:00.000Z", revision:null, dirty:true }),
+    loadLocalWorkouts: () => [{ id:"local-workout", body:"PUSH\np 135x8", createdAt:"2026-09-12T00:00:00.000Z", updatedAt:"2026-09-12T00:00:00.000Z", revision:null, dirty:true }],
+    saveLocalWorkouts() {},
+    mostRecentWorkout: (rows) => rows[0],
+  };
 
   for (const k of Object.keys(require.cache)) if (k.includes("react-dom")) delete require.cache[k];
   const ReactDOMClient = require("react-dom/client");
@@ -46,14 +53,20 @@ const tests = [];
 const test = (n, f) => tests.push([n, f]);
 
 test("compiles under the react preset", () => {
-  assert.ok(compile().length > 0);
+  const compiled = compile();
+  assert.ok(compiled.length > 0);
+  assert.ok(compiled.includes("ironvimWorkouts"), "app consumes the workout collection API");
+  assert.ok(compiled.includes("selectedWorkoutId"), "editor state is a selected workout id");
+  assert.ok(compiled.includes("updateSelectedWorkout"), "textarea edits the selected workout");
+  assert.ok(!compiled.includes("setText(e.target.value)"), "single-document editor binding is gone");
 });
 
 test("mounts with no sync module at all (CDN blocked / offline cold start)", () => {
   const html = mount(undefined);
   assert.ok(html.includes("local only"), "status falls back to local-only");
   assert.ok(html.includes("Cloud sync is not configured"));
-  assert.ok(html.includes("+ new session") && html.includes("? grammar"), "log controls intact");
+  assert.ok(html.includes("+ new workout") && html.includes("? grammar"), "log controls intact");
+  assert.ok(html.includes(">edit</button>"), "parsed workout has an edit action");
 });
 
 test("signed out: email field and magic-link action", () => {
@@ -79,7 +92,7 @@ test("conflict: modal shows both copies and all three choices", () => {
     getStatus: () => "conflict",
     init: (h) => {
       h.onStatus("conflict", null);
-      h.onConflict({ local: { text: "MINE\np 135x8" }, remote: { text: "THEIRS\nsq 225x5" } });
+      h.onConflict({ workoutId:"local-workout", local: { body: "MINE\np 135x8" }, remote: { body: "THEIRS\nsq 225x5" } });
     },
   });
   assert.ok(html.includes("SYNC CONFLICT"));
@@ -93,9 +106,9 @@ test("sync reports the local state it will push", () => {
   let captured = null;
   mount({ getStatus: () => "signed-out", init: (h) => { captured = h.getLocal(); } });
   assert.ok(captured, "init received a getLocal hook");
-  assert.ok(captured.text.includes("PUSH"), "local text handed to sync");
+  assert.ok(captured.workouts[0].body.includes("PUSH"), "local workout handed to sync");
   assert.strictEqual(captured.bodyweight, "180");
-  assert.strictEqual(captured.untouched, true, "fresh sample log marked untouched");
+  assert.strictEqual(captured.untouched, false, "test workout is not the untouched sample");
   assert.ok(captured.legend.pd, "legend included");
 });
 

@@ -1,6 +1,6 @@
-const CACHE = "ironvim-v3";
+const CACHE = "ironvim-v4";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg",
-                "./supabase-config.js", "./sync.js"];
+                "./supabase-config.js", "./workouts.js", "./sync.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
