@@ -19,7 +19,8 @@ function compile() {
 }
 
 // Fresh jsdom + fresh react-dom per mount: react-dom caches globals at require time.
-function mount(syncStub) {
+// Returns the live dom so tests can dispatch clicks and re-read state after events.
+function mountDom(syncStub) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://ironvim.test/" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -42,7 +43,11 @@ function mount(syncStub) {
   const { App } = new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS };")(React);
   const el = dom.window.document.getElementById("root");
   act(() => { ReactDOMClient.createRoot(el).render(React.createElement(App)); });
-  return el.innerHTML;
+  return { dom, el, act };
+}
+
+function mount(syncStub) {
+  return mountDom(syncStub).el.innerHTML;
 }
 
 function exports_() {
@@ -56,8 +61,10 @@ test("compiles under the react preset", () => {
   const compiled = compile();
   assert.ok(compiled.length > 0);
   assert.ok(compiled.includes("ironvimWorkouts"), "app consumes the workout collection API");
-  assert.ok(compiled.includes("selectedWorkoutId"), "editor state is a selected workout id");
-  assert.ok(compiled.includes("updateSelectedWorkout"), "textarea edits the selected workout");
+  assert.ok(compiled.includes("editingId"), "editor state is the workout id being edited");
+  assert.ok(compiled.includes("updateWorkout"), "textarea edits a workout by id");
+  assert.ok(!compiled.includes("selectedWorkoutId"), "main selected-workout editor is gone");
+  assert.ok(!compiled.includes("updateSelectedWorkout"), "single selected-editor binding is gone");
   assert.ok(!compiled.includes("setText(e.target.value)"), "single-document editor binding is gone");
 });
 
@@ -67,6 +74,7 @@ test("mounts with no sync module at all (CDN blocked / offline cold start)", () 
   assert.ok(html.includes("Cloud sync is not configured"));
   assert.ok(html.includes("+ new workout") && html.includes("? grammar"), "log controls intact");
   assert.ok(html.includes(">edit</button>"), "parsed workout has an edit action");
+  assert.ok(!html.includes("<textarea"), "no main editor textarea on the default mount");
 });
 
 test("signed out: email field and magic-link action", () => {
@@ -110,6 +118,27 @@ test("sync reports the local state it will push", () => {
   assert.strictEqual(captured.bodyweight, "180");
   assert.strictEqual(captured.untouched, false, "test workout is not the untouched sample");
   assert.ok(captured.legend.pd, "legend included");
+});
+
+test("edit button opens a modal textarea bound to that workout", () => {
+  let getLocal = null;
+  const { dom, el, act } = mountDom({ getStatus: () => "signed-out", init: (h) => { getLocal = h.getLocal; } });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  assert.ok(editBtn, "session card has an edit button");
+
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  const ta = dom.window.document.querySelector("textarea");
+  assert.ok(ta, "modal renders a textarea");
+  assert.ok(el.innerHTML.includes("EDIT WORKOUT"), "modal title shown");
+  assert.ok(el.innerHTML.includes(">done</button>"), "modal has a done button");
+  assert.strictEqual(ta.value, "PUSH\np 135x8", "textarea shows the workout raw body");
+
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+  act(() => {
+    setter.call(ta, "PUSH\np 200x5");
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  assert.ok(getLocal().workouts[0].body.includes("p 200x5"), "typing in the modal updates the workout collection");
 });
 
 test("every sync status maps to a label", () => {

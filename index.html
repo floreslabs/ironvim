@@ -344,6 +344,33 @@ function Modal({ title, accent, onClose, children }) {
   );
 }
 
+function WorkoutModal({ workout, onClose, onChange }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [workout.id]);
+  return (
+    <Modal title="EDIT WORKOUT" accent={C.green} onClose={onClose}>
+      <textarea
+        ref={ref}
+        className="gl-editor"
+        value={workout.body}
+        onChange={(e) => onChange(workout.id, e.target.value)}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        style={{ width:"100%", minHeight:260, background:C.bg0, color:C.fg, border:`1px solid ${C.bg3}`, borderRadius:6, outline:"none", padding:12, lineHeight:1.6 }}
+      />
+      <div style={{ display:"flex", marginTop:10 }}>
+        <button className="gl-btn" style={{ flex:1 }} onClick={onClose}>done</button>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------------- cloud sync (state machine lives in sync.js) ---------------- */
 const SYNC_LABELS = {
   "local-only": { text:"local only", color:C.gray },
@@ -385,10 +412,7 @@ function App() {
   const [workouts, setWorkouts] = useState(() => workoutApi
     ? workoutApi.loadLocalWorkouts(localStorage, parseLog, new Date())
     : [{ id:"local-workout", body:SAMPLE_LOG, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), revision:null, dirty:true }]);
-  const [selectedWorkoutId, setSelectedWorkoutId] = useState(() => {
-    const stored = store.get("ironvim-selected-workout", null);
-    return stored || null;
-  });
+  const [editingId, setEditingId] = useState(null);
   const [bodyweight, setBodyweight] = useState(() => store.get("ironvim-logs-bodyweight", "180"));
   const [legend, setLegend] = useState(() => {
     const raw = store.get("ironvim-logs-legend", null);
@@ -400,7 +424,6 @@ function App() {
   const [newLegend, setNewLegend] = useState({ base:"", code:"", label:"" });
   const [saved, setSaved] = useState(false);
   const [acct, setAcct] = useState({ email:"", sent:false, busy:false, error:null });
-  const editorRef = useRef(null);
   /* adopting a remote copy must not be pushed straight back up, and the
      mount-time save must not mark the log dirty when nothing was edited */
   const skipNotify = useRef(false);
@@ -413,23 +436,13 @@ function App() {
     setLegend(withDefaultLegend(remote.legend || {}));
   }, []);
 
-  const selectedWorkout = workouts.find((workout) => workout.id === selectedWorkoutId)
-    || workoutApi?.mostRecentWorkout(workouts)
-    || workouts[0]
-    || null;
-  const text = selectedWorkout ? selectedWorkout.body : "";
-
-  useEffect(() => {
-    if (!selectedWorkout && workouts.length) setSelectedWorkoutId(workouts[0].id);
-    else if (selectedWorkout && selectedWorkout.id !== selectedWorkoutId) setSelectedWorkoutId(selectedWorkout.id);
-  }, [selectedWorkout, selectedWorkoutId, workouts]);
-
   const sync = useSync({
     local: { workouts, bodyweight, legend, untouched: workouts.length === 1 && workouts[0].body === SAMPLE_LOG },
     applyRemote,
   });
   const syncLabel = SYNC_LABELS[sync.status] || SYNC_LABELS["local-only"];
   const localOnly = sync.status === "local-only" || sync.status === "signed-out";
+  const editingWorkout = workouts.find((w) => w.id === editingId) || null;
 
   const acctAction = useCallback((fn, onDone) => {
     setAcct((a) => ({ ...a, busy:true, error:null }));
@@ -438,37 +451,24 @@ function App() {
   }, []);
 
   const addSession = useCallback(() => {
-    const workout = workoutApi.createWorkout(sessionHeader() + "\n");
+    const workout = workoutApi
+      ? workoutApi.createWorkout(sessionHeader() + "\n")
+      : { id:"local-workout", body:sessionHeader() + "\n", createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), revision:null, dirty:true };
     setWorkouts((prev) => [...prev, workout]);
-    setSelectedWorkoutId(workout.id);
-    store.set("ironvim-selected-workout", workout.id);
-    // drop the caret at the end of the fresh header so the next line is just typing
-    requestAnimationFrame(() => {
-      const el = editorRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-      el.scrollTop = el.scrollHeight;
-    });
+    setEditingId(workout.id);
   }, [workoutApi]);
 
-  const updateSelectedWorkout = useCallback((value) => {
-    if (!selectedWorkout) return;
-    setWorkouts((prev) => prev.map((workout) => workout.id === selectedWorkout.id
+  const updateWorkout = useCallback((id, value) => {
+    setWorkouts((prev) => prev.map((workout) => workout.id === id
       ? { ...workout, body:value, updatedAt:new Date().toISOString(), dirty:true }
       : workout));
-  }, [selectedWorkout]);
-
-  const editWorkout = useCallback((id) => {
-    setSelectedWorkoutId(id);
-    store.set("ironvim-selected-workout", id);
-    requestAnimationFrame(() => editorRef.current?.focus());
   }, []);
+
+  const editWorkout = useCallback((id) => setEditingId(id), []);
 
   useEffect(() => {
     const h = setTimeout(() => {
       if (workoutApi) workoutApi.saveLocalWorkouts(localStorage, workouts);
-      if (selectedWorkout) store.set("ironvim-selected-workout", selectedWorkout.id);
       store.set("ironvim-logs-bodyweight", bodyweight);
       store.set("ironvim-logs-legend", JSON.stringify(legend));
       setSaved(true);
@@ -478,7 +478,7 @@ function App() {
       else if (window.ironvimSync) window.ironvimSync.notifyChange();
     }, 500);
     return () => clearTimeout(h);
-  }, [workouts, selectedWorkout, bodyweight, legend, workoutApi]);
+  }, [workouts, bodyweight, legend, workoutApi]);
 
   const sessions = useMemo(() => workouts.map((workout) => ({
     ...workout,
@@ -533,16 +533,9 @@ function App() {
       <div className="gl-grid" style={{ display:"flex", flexDirection:"column", gap:12 }}>
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <Panel title="LOG" accent={C.green}>
-            <textarea
-              className="gl-editor"
-              ref={editorRef}
-              value={text}
-              onChange={(e) => updateSelectedWorkout(e.target.value)}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoCorrect="off"
-              style={{ width:"100%", minHeight:220, background:C.bg0, color:C.fg, border:`1px solid ${C.bg3}`, borderRadius:6, outline:"none", padding:12, lineHeight:1.6 }}
-            />
+            <div style={{ color:C.gray, fontSize:12, marginBottom:10 }}>
+              Tap <span style={{ color:C.blue }}>edit</span> on a session to change its text.
+            </div>
             <div style={{ display:"flex", marginTop:10 }}>
               <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }} onClick={addSession}>+ new workout</button>
             </div>
@@ -728,6 +721,10 @@ function App() {
               onClick={() => window.ironvimSync.resolveConflict({ workoutId:sync.conflict.workoutId, choice:"both" })}>keep both</button>
           </div>
         </Modal>
+      )}
+
+      {editingWorkout && (
+        <WorkoutModal workout={editingWorkout} onClose={() => setEditingId(null)} onChange={updateWorkout} />
       )}
     </div>
   );

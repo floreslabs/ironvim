@@ -83,10 +83,10 @@ redirect configuration.
 - **iPhone:** open the URL in Safari → Share icon → "Add to Home Screen."
 - **Android:** open the URL in Chrome → ⋮ menu → "Add to Home screen" / "Install app."
 
-It'll launch full-screen without browser chrome, and your workouts/settings persist in the phone's local storage between visits. Each workout is stored as a separate record in the `ironvim-workouts` key; the editor edits the selected workout, and each parsed workout card has an **edit** action. Existing `ironvim-logs-text` data is migrated automatically on first load.
+It'll launch full-screen without browser chrome, and your workouts/settings persist in the phone's local storage between visits. Each workout is stored as a separate record in the `ironvim-workouts` key; each session card's **edit** action opens a modal editor for that workout, and existing `ironvim-logs-text` data is migrated automatically on first load.
 
 ## Notes / limitations
-- Data is stored per-device (`localStorage`) and is also available for optional Supabase sync across devices. Use **+ new workout** to create a separate record; editing the textarea autosaves only the selected workout.
+- Data is stored per-device (`localStorage`) and is also available for optional Supabase sync across devices. Use **+ new workout** to create a separate record; its modal editor autosaves it.
 - The app loads React from a CDN on first visit and caches it for offline use after that; the very first load needs a network connection.
 - Clearing your phone browser's site data / "Clear all data" will wipe your logged workouts — there's no cloud backup by default.
 
