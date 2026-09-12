@@ -1,0 +1,17 @@
+{
+  "name": "ironvim",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "node test/parser.test.js && node test/sync.test.js && node test/render.test.js"
+  },
+  "devDependencies": {
+    "@babel/standalone": "^8.0.5",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.3.5"
+  }
+}

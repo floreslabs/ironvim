@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2c2e34" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="ironvim" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<title>ironvim</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  :root {
+    --bg0:#2c2e34; --bg1:#33353f; --bg2:#363944; --bg3:#3b3e48; --bg4:#414550;
+    --fg:#e2e2e3; --red:#fc5d7c; --orange:#f39660; --yellow:#e7c664;
+    --green:#9ed072; --blue:#76cce0; --purple:#b39df3; --gray:#7f8490;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; background:var(--bg0); color:var(--fg);
+    font-family:'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+    -webkit-text-size-adjust:100%; }
+  #root { min-height:100vh; padding-bottom: env(safe-area-inset-bottom); }
+  ::selection { background:#b39df355; }
+  textarea, input, select { font-family: inherit; }
+  /* iOS: inputs must be >=16px or Safari force-zooms on focus */
+  textarea.gl-editor, input.gl-input { font-size:16px !important; }
+  textarea.gl-editor { scrollbar-width:thin; scrollbar-color:var(--bg4) var(--bg1); }
+  textarea.gl-editor::-webkit-scrollbar { width:8px; }
+  textarea.gl-editor::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:5px; }
+  button.gl-btn, .gl-tap {
+    min-height:44px; min-width:44px; background:var(--bg2); border:1px solid var(--bg4);
+    color:var(--fg); font-family:inherit; font-size:13px; padding:8px 12px; border-radius:6px;
+    display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;
+  }
+  button.gl-btn:active { background:var(--bg3); }
+  input.gl-input { background:var(--bg2); border:1px solid var(--bg4); color:var(--fg);
+    padding:9px 10px; border-radius:6px; outline:none; min-height:40px; }
+  input.gl-input:focus { border-color:var(--blue); }
+  code { background:var(--bg2); padding:1px 4px; border-radius:3px; }
+  @media (min-width:900px) { .gl-grid { display:grid; grid-template-columns: 1.3fr 1fr; gap:16px; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+<!-- pinned + SRI: an unpinned major would silently change the bytes we execute -->
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"
+        integrity="sha384-JBR+x8blGwjDRO63aHCGiZMD4VNiTR4ZUGA+N6ZKLf3zNt1fK8IBpcgPaMrxqWBp"></script>
+<script src="supabase-config.js"></script>
+<script src="sync.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+const C = {
+  bg0:"#2c2e34", bg1:"#33353f", bg2:"#363944", bg3:"#3b3e48", bg4:"#414550",
+  fg:"#e2e2e3", red:"#fc5d7c", orange:"#f39660", yellow:"#e7c664",
+  green:"#9ed072", blue:"#76cce0", purple:"#b39df3", gray:"#7f8490",
+};
+
+/* ---------------- grammar tables ---------------- */
+const ANGLE_LABELS = { i:"Incline", d:"Decline" };
+const EQUIP_LABELS = { db:"Dumbbell", ez:"EZ-Bar", m:"Machine", c:"Cable", s:"Smith Machine" };
+const EQUIP_CODES = ["db","ez","m","c","s"];
+const ANGLE_CODES = ["i","d"];
+const BASE_LABELS = {
+  p:"Press", c:"Curl", r:"Row", f:"Fly", pd:"Pulldown", tp:"Triceps Pushdown", d:"Delt Raises", t:"Triceps Extension",
+  sq:"Squat", dl:"Deadlift", lp:"Leg Press", lc:"Leg Curl", le:"Leg Extension",
+  cr:"Calf Raise", lu:"Lunge", pu:"Pull-Up", dip:"Dip", op:"Overhead Press",
+};
+const RESERVED_MULTI = ["sq","dl","lp","lc","le","cr","ca","lu","pu","di","dip","op","pd","tp","d","e"];
+/* retired codes that still parse, so older logs keep resolving. not listed in the reference. */
+const BASE_ALIASES = { l:"pd", ca:"cr", e:"d", di:"dip" };
+const resolveBase = (code) => BASE_ALIASES[code] || (BASE_LABELS[code] ? code : null);
+const DEFAULT_EQUIP = {
+  p:"Barbell", c:"Barbell", r:"Barbell", f:"Dumbbell", d:"Dumbbell", e:"Dumbbell", t:"Barbell",
+  sq:"Barbell", dl:"Barbell", lu:"Bodyweight", pu:"Bodyweight", dip:"Bodyweight", op:"Barbell",
+  lp:"Machine", lc:"Machine", le:"Machine", cr:"Machine", tp:"Cable",
+};
+const DEFAULT_LEGEND = {
+  pd: { t:"Triangle", s:"Single Handle", v:"V-Bar", r:"Rope", w:"Wide Bar", b:"Straight Bar" },
+  tp: { b:"Straight Bar", r:"Rope", v:"V-Bar" },
+  t: { r:"Rope", v:"V-Bar", b:"Straight Bar" },
+  d: { f:"Front", s:"Side", r:"Rear" },
+  lc: { l:"Lying", s:"Seated" },
+  lu: { f:"Forward", r:"Reverse", d:"Decline", x:"Deficit" },
+};
+const SAMPLE_LOG = `PUSH 09-11
+p 135x8,8,6 "felt strong today
+idbp 60x10,10,8
+ct.r 60x12,12,10
+di bw+25x8,8,6
+
+LEGS 09-12
+sq 225x5*5
+lc.l 90x12,10,10
+lu.r 45x8,8 "reverse lunge, barbell
+le 120x12 140x10 160x8 "ascending
+lp 400x10,10,8`;
+
+/* ---------------- parser (identical grammar to the chat version) ---------------- */
+function decompose(token) {
+  if (RESERVED_MULTI.includes(token)) return { angle:null, equipment:null, base:resolveBase(token) };
+  for (const eq of EQUIP_CODES) {
+    if (token.startsWith(eq)) {
+      const rem = token.slice(eq.length);
+      if (RESERVED_MULTI.includes(rem)) return { angle:null, equipment:eq, base:resolveBase(rem) };
+    }
+  }
+  for (const a of ANGLE_CODES) {
+    if (token.startsWith(a) && !(a === "d" && token.slice(0,2) === "db")) {
+      const remA = token.slice(1);
+      if (RESERVED_MULTI.includes(remA)) return { angle:a, equipment:null, base:resolveBase(remA) };
+      for (const eq of EQUIP_CODES) {
+        if (remA.startsWith(eq)) {
+          const remB = remA.slice(eq.length);
+          if (RESERVED_MULTI.includes(remB)) return { angle:a, equipment:eq, base:resolveBase(remB) };
+        }
+      }
+    }
+  }
+  let rem = token; let angle = null;
+  if (rem[0] === "i") { angle = "i"; rem = rem.slice(1); }
+  else if (rem[0] === "d" && rem.slice(0,2) !== "db") { angle = "d"; rem = rem.slice(1); }
+  let equipment = null;
+  for (const eq of EQUIP_CODES) {
+    if (rem.startsWith(eq) && rem.length > eq.length) { equipment = eq; rem = rem.slice(eq.length); break; }
+  }
+  if (resolveBase(rem) && !RESERVED_MULTI.includes(rem)) return { angle, equipment, base:resolveBase(rem) };
+  if (angle) {
+    let rem2 = token; let equipment2 = null;
+    for (const eq of EQUIP_CODES) {
+      if (rem2.startsWith(eq) && rem2.length > eq.length) { equipment2 = eq; rem2 = rem2.slice(eq.length); break; }
+    }
+    if (resolveBase(rem2) && !RESERVED_MULTI.includes(rem2)) return { angle:null, equipment:equipment2, base:resolveBase(rem2) };
+  }
+  return null;
+}
+
+/* A space separates sets. ">" still parses so older logs keep working.
+   Spaces that merely pad a separator (, * x >) are not set breaks, so collapse
+   those first, then treat whatever whitespace is left as the real separator. */
+function normalizeSets(raw) {
+  return raw
+    .replace(/\s*>\s*/g, ">")
+    .replace(/\s*,\s*/g, ",")
+    .replace(/\s*\*\s*/g, "*")
+    .replace(/\s*x\s*/gi, "x")
+    .trim()
+    .split(/\s+/)
+    .join(">");
+}
+
+function parseSets(str) {
+  const segments = str.split(">");
+  const sets = [];
+  for (const seg of segments) {
+    const m = seg.match(/^(bw(?:[+-]\d+(?:\.\d+)?)?|\d+(?:\.\d+)?)x(.+)$/i);
+    if (!m) return null;
+    const weightRaw = m[1];
+    const repsParts = m[2].split(",");
+    for (const part of repsParts) {
+      const starMatch = part.match(/^(\d+)\*(\d+)$/);
+      if (starMatch) {
+        const repsVal = parseInt(starMatch[1],10); const count = parseInt(starMatch[2],10);
+        for (let i=0;i<count;i++) sets.push({ weightRaw, reps:repsVal });
+      } else {
+        const repsVal = parseInt(part,10);
+        if (Number.isNaN(repsVal)) return null;
+        sets.push({ weightRaw, reps:repsVal });
+      }
+    }
+  }
+  return sets.length ? sets : null;
+}
+
+function tryParseExerciseLine(mainPart) {
+  const supersetParts = mainPart.split(/\s+\+\s+/);
+  const entries = [];
+  for (const part of supersetParts) {
+    const tokens = part.trim().split(/\s+/);
+    if (tokens.length < 2) return null;
+    const exerciseToken = tokens[0].toLowerCase();
+    const setsToken = normalizeSets(tokens.slice(1).join(" "));
+    const [codePart, variationPart] = exerciseToken.split(".");
+    const decomposed = decompose(codePart);
+    if (!decomposed) return null;
+    const sets = parseSets(setsToken);
+    if (!sets) return null;
+    entries.push({ code:exerciseToken, ...decomposed, variation:variationPart || null, sets });
+  }
+  return entries;
+}
+
+function parseLog(text) {
+  const lines = text.split("\n");
+  const sessions = [];
+  let current = null;
+  const ensureSession = (title) => { current = { title, entries:[], notes:[] }; sessions.push(current); };
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    if (line.startsWith('"')) { if (!current) ensureSession("Session"); current.notes.push(line.slice(1).trim()); return; }
+    let mainPart = line; let note = null;
+    const q = line.indexOf('"');
+    if (q !== -1) { mainPart = line.slice(0,q).trim(); note = line.slice(q+1).trim(); }
+    if (!mainPart) return;
+    const parsed = tryParseExerciseLine(mainPart);
+    if (parsed) {
+      if (!current) ensureSession("Session");
+      parsed.forEach((entry) => current.entries.push({ ...entry, note, lineNum:i+1 }));
+    } else { ensureSession(mainPart); }
+  });
+  return sessions;
+}
+
+function resolveWeight(weightRaw, bodyweight) {
+  if (/^bw/i.test(weightRaw)) {
+    const mod = weightRaw.length > 2 ? parseFloat(weightRaw.slice(2)) : 0;
+    if (bodyweight === "" || bodyweight == null) return null;
+    return parseFloat(bodyweight) + mod;
+  }
+  return parseFloat(weightRaw);
+}
+function displayWeight(weightRaw) {
+  if (/^bw/i.test(weightRaw)) { const rest = weightRaw.slice(2); return rest ? `BW${rest}` : "BW"; }
+  return `${weightRaw} lb`;
+}
+function describeExercise(entry, legend) {
+  const parts = [];
+  if (entry.angle) parts.push(ANGLE_LABELS[entry.angle]);
+  const equipLabel = entry.equipment ? EQUIP_LABELS[entry.equipment] : DEFAULT_EQUIP[entry.base];
+  if (equipLabel) parts.push(equipLabel);
+  parts.push(BASE_LABELS[entry.base] || entry.base);
+  let label = parts.join(" ");
+  if (entry.variation) {
+    const varLabel = (legend[entry.base] && legend[entry.base][entry.variation]) || entry.variation.toUpperCase();
+    label += ` (${varLabel})`;
+  }
+  return label;
+}
+
+/* Saved legends are keyed by base code, so a retired code hands its labels to the
+   current one. Without this, a legend persisted under the old key would silently
+   drop its variation names. */
+function migrateLegend(legend) {
+  const next = { ...legend };
+  Object.entries(BASE_ALIASES).forEach(([old, current]) => {
+    if (!next[old]) return;
+    next[current] = { ...next[old], ...(next[current] || {}) };
+    delete next[old];
+  });
+  return next;
+}
+
+function withDefaultLegend(legend) {
+  const migrated = migrateLegend(legend || {});
+  if (migrated.lu && migrated.lu.d === "Decline / Deficit") migrated.lu = { ...migrated.lu, d:"Decline" };
+  return Object.entries(DEFAULT_LEGEND).reduce((next, [base, defaults]) => ({
+    ...next,
+    [base]: { ...defaults, ...(next[base] || {}) },
+  }), migrated);
+}
+
+/* ---------------- session header convention ---------------- */
+function sessionHeader(d) {
+  const day = d || new Date();
+  return `Workout for ${day.getMonth()+1}/${day.getDate()}/${day.getFullYear()}`;
+}
+
+/* ---------------- localStorage persistence (swap-in for window.storage) ---------------- */
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v == null ? fallback : v; } catch(e) { return fallback; } },
+  set(key, val) { try { localStorage.setItem(key, val); return true; } catch(e) { return false; } },
+};
+
+/* ---------------- UI ---------------- */
+function Panel({ title, accent, children, right }) {
+  return (
+    <div style={{ background:C.bg1, border:`1px solid ${C.bg3}`, borderRadius:8, overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.bg2, borderBottom:`1px solid ${C.bg3}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ width:6, height:6, borderRadius:"50%", background:accent||C.blue, display:"inline-block" }} />
+          <span style={{ color:C.gray, fontSize:12.5, letterSpacing:0.3 }}>{title}</span>
+        </div>
+        {right}
+      </div>
+      <div style={{ padding:12 }}>{children}</div>
+    </div>
+  );
+}
+
+function GrammarReference() {
+  return (
+    <div style={{ fontSize:12, display:"flex", flexDirection:"column", gap:10 }}>
+      <div style={{ color:C.orange }}>[angle][equipment][base][.variation] weight×reps</div>
+      <div><div style={{ color:C.gray, marginBottom:3 }}>angle</div>{Object.entries(ANGLE_LABELS).map(([k,v])=><div key={k}><span style={{color:C.blue}}>{k}</span> = {v}</div>)}</div>
+      <div><div style={{ color:C.gray, marginBottom:3 }}>equipment</div>{Object.entries(EQUIP_LABELS).sort(([,a],[,b])=>a.localeCompare(b)).map(([k,v])=><div key={k}><span style={{color:C.blue}}>{k}</span> = {v}</div>)}</div>
+      <div><div style={{ color:C.gray, marginBottom:3 }}>base</div>{Object.entries(BASE_LABELS).sort(([,a],[,b])=>a.localeCompare(b)).map(([k,v])=><div key={k}><span style={{color:C.blue}}>{k}</span> = {v}</div>)}</div>
+      <div>
+        <div style={{ color:C.gray, marginBottom:3 }}>tokens</div>
+        <div><span style={{color:C.blue}}>bw / bw+n / bw-n</span> = bodyweight, added, assisted</div>
+        <div><span style={{color:C.blue}}>,</span> = next set, same weight</div>
+        <div><span style={{color:C.blue}}>space</span> = next set, new weight</div>
+        <div><span style={{color:C.blue}}>&gt;</span> = next set, new weight (old form, still parses)</div>
+        <div><span style={{color:C.blue}}>*n</span> = repeat for n sets</div>
+        <div><span style={{color:C.blue}}>.x</span> = variation (per exercise)</div>
+        <div><span style={{color:C.blue}}>"</span> = comment</div>
+        <div><span style={{color:C.blue}}>+</span> = superset</div>
+      </div>
+    </div>
+  );
+}
+
+function Modal({ title, accent, onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"#1b1c2199", display:"flex",
+      alignItems:"center", justifyContent:"center", padding:12, zIndex:50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:C.bg1, border:`1px solid ${C.bg4}`,
+        borderRadius:8, width:"100%", maxWidth:520, maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.bg2, borderBottom:`1px solid ${C.bg3}` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ width:6, height:6, borderRadius:"50%", background:accent||C.blue, display:"inline-block" }} />
+            <span style={{ color:C.gray, fontSize:12.5, letterSpacing:0.3 }}>{title}</span>
+          </div>
+          <button className="gl-btn" style={{ minHeight:32, minWidth:32, padding:6 }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ padding:12, overflowY:"auto" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- cloud sync (state machine lives in sync.js) ---------------- */
+const SYNC_LABELS = {
+  "local-only": { text:"local only", color:C.gray },
+  "signed-out": { text:"local only", color:C.gray },
+  syncing:      { text:"↑ syncing",  color:C.blue },
+  synced:       { text:"✓ synced",   color:C.green },
+  offline:      { text:"⚠ offline",  color:C.yellow },
+  conflict:     { text:"⚠ conflict", color:C.red },
+};
+
+function useSync({ local, applyRemote }) {
+  const [status, setStatus] = useState(() => (window.ironvimSync ? window.ironvimSync.getStatus() : "local-only"));
+  const [detail, setDetail] = useState(null);
+  const [email, setEmail] = useState(null);
+  const [conflict, setConflict] = useState(null);
+  /* refs so sync.js always reads current state without re-running init */
+  const localRef = useRef(local);
+  const applyRef = useRef(applyRemote);
+  localRef.current = local;
+  applyRef.current = applyRemote;
+
+  useEffect(() => {
+    const sync = window.ironvimSync;
+    if (!sync) return;
+    sync.init({
+      getLocal: () => localRef.current,
+      applyRemote: (remote) => applyRef.current(remote),
+      onStatus: (s, d) => { setStatus(s); setDetail(d); },
+      onConflict: (c) => setConflict(c),
+      onAuth: (addr) => setEmail(addr),
+    });
+  }, []);
+
+  return { status, detail, email, conflict };
+}
+
+function App() {
+  const [text, setText] = useState(() => store.get("ironvim-logs-text", SAMPLE_LOG));
+  const [bodyweight, setBodyweight] = useState(() => store.get("ironvim-logs-bodyweight", "180"));
+  const [legend, setLegend] = useState(() => {
+    const raw = store.get("ironvim-logs-legend", null);
+    try { return withDefaultLegend(raw ? JSON.parse(raw) : DEFAULT_LEGEND); } catch(e) { return withDefaultLegend(DEFAULT_LEGEND); }
+  });
+  const [showSample, setShowSample] = useState(false);
+  const [showGrammar, setShowGrammar] = useState(false);
+  const [grammarTab, setGrammarTab] = useState("syntax");
+  const [newLegend, setNewLegend] = useState({ base:"", code:"", label:"" });
+  const [saved, setSaved] = useState(false);
+  const [acct, setAcct] = useState({ email:"", sent:false, busy:false, error:null });
+  const editorRef = useRef(null);
+  /* adopting a remote copy must not be pushed straight back up, and the
+     mount-time save must not mark the log dirty when nothing was edited */
+  const skipNotify = useRef(false);
+  const firstSave = useRef(true);
+
+  const applyRemote = useCallback((remote) => {
+    skipNotify.current = true;
+    setText(remote.text == null ? "" : remote.text);
+    setBodyweight(remote.bodyweight == null ? "" : remote.bodyweight);
+    setLegend(withDefaultLegend(remote.legend || {}));
+  }, []);
+
+  const sync = useSync({
+    local: { text, bodyweight, legend, untouched: text === SAMPLE_LOG },
+    applyRemote,
+  });
+  const syncLabel = SYNC_LABELS[sync.status] || SYNC_LABELS["local-only"];
+  const localOnly = sync.status === "local-only" || sync.status === "signed-out";
+
+  const acctAction = useCallback((fn, onDone) => {
+    setAcct((a) => ({ ...a, busy:true, error:null }));
+    fn().then(() => setAcct((a) => ({ ...onDone(a), busy:false, error:null })))
+        .catch((e) => setAcct((a) => ({ ...a, busy:false, error:(e && e.message) || String(e) })));
+  }, []);
+
+  const addSession = useCallback(() => {
+    setText((prev) => {
+      const trimmed = prev.replace(/\s+$/, "");
+      return (trimmed ? trimmed + "\n\n" : "") + sessionHeader() + "\n";
+    });
+    // drop the caret at the end of the fresh header so the next line is just typing
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
+  useEffect(() => {
+    const h = setTimeout(() => {
+      store.set("ironvim-logs-text", text);
+      store.set("ironvim-logs-bodyweight", bodyweight);
+      store.set("ironvim-logs-legend", JSON.stringify(legend));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1200);
+      if (firstSave.current) firstSave.current = false;
+      else if (skipNotify.current) skipNotify.current = false;
+      else if (window.ironvimSync) window.ironvimSync.notifyChange();
+    }, 500);
+    return () => clearTimeout(h);
+  }, [text, bodyweight, legend]);
+
+  const sessions = useMemo(() => parseLog(text), [text]);
+
+  const allTime = useMemo(() => {
+    const map = {}; let totalVolume = 0; let totalSets = 0;
+    sessions.forEach((s) => s.entries.forEach((entry) => {
+      const label = describeExercise(entry, legend);
+      if (!map[label]) map[label] = { maxWeight:null, volume:0, sets:0 };
+      entry.sets.forEach((set) => {
+        const w = resolveWeight(set.weightRaw, bodyweight);
+        totalSets += 1; map[label].sets += 1;
+        if (w != null) {
+          const vol = w * set.reps;
+          map[label].volume += vol; totalVolume += vol;
+          if (map[label].maxWeight == null || w > map[label].maxWeight) map[label].maxWeight = w;
+        }
+      });
+    }));
+    const rows = Object.entries(map).map(([label,v]) => ({ label, ...v })).sort((a,b) => b.volume - a.volume);
+    return { rows, totalVolume, totalSets, sessionCount: sessions.length };
+  }, [sessions, bodyweight, legend]);
+  const maxRowVolume = allTime.rows.length ? allTime.rows[0].volume : 1;
+
+  const addLegendEntry = useCallback(() => {
+    const { base, code, label } = newLegend;
+    if (!base.trim() || !code.trim() || !label.trim()) return;
+    setLegend((prev) => ({ ...prev, [base.trim()]: { ...(prev[base.trim()]||{}), [code.trim()]: label.trim() } }));
+    setNewLegend({ base:"", code:"", label:"" });
+  }, [newLegend]);
+  const removeLegendEntry = (base, code) => {
+    setLegend((prev) => { const next = { ...prev }; const f = { ...(next[base]||{}) }; delete f[code]; next[base] = f; return next; });
+  };
+
+  return (
+    <div style={{ background:C.bg0, color:C.fg, minHeight:"100vh", padding:12, maxWidth:1100, margin:"0 auto" }}>
+      {/* title bar */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, padding:"10px 12px", background:C.bg1, border:`1px solid ${C.bg3}`, borderRadius:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ width:10, height:10, borderRadius:"50%", background:C.red, display:"inline-block" }} />
+          <span style={{ width:10, height:10, borderRadius:"50%", background:C.yellow, display:"inline-block" }} />
+          <span style={{ width:10, height:10, borderRadius:"50%", background:C.green, display:"inline-block" }} />
+          <span style={{ marginLeft:8, color:C.gray, fontSize:13 }}>~/ironvim</span>
+        </div>
+        <span title={sync.detail || ""} style={{ color:(saved && localOnly) ? C.green : syncLabel.color, fontSize:11 }}>
+          {(saved && localOnly) ? "✓ saved" : syncLabel.text}
+        </span>
+      </div>
+
+      <div className="gl-grid" style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <Panel title="LOG" accent={C.green}>
+            <textarea
+              className="gl-editor"
+              ref={editorRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              style={{ width:"100%", minHeight:220, background:C.bg0, color:C.fg, border:`1px solid ${C.bg3}`, borderRadius:6, outline:"none", padding:12, lineHeight:1.6 }}
+            />
+            <div style={{ display:"flex", marginTop:10 }}>
+              <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }} onClick={addSession}>+ new session</button>
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8 }}>
+              <button className="gl-btn" style={{ flex:1 }} onClick={() => setShowSample(true)}>ⓘ sample</button>
+              <button className="gl-btn" style={{ flex:1 }} onClick={() => { setGrammarTab("syntax"); setShowGrammar(true); }}>? grammar</button>
+              <button className="gl-btn" style={{ flex:1 }} onClick={() => { setGrammarTab("variations"); setShowGrammar(true); }}>≡ legend</button>
+            </div>
+          </Panel>
+
+          <Panel title="PARSED SESSIONS" accent={C.blue}>
+            {sessions.length === 0 && <div style={{ color:C.gray, fontSize:13 }}>No entries yet.</div>}
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {sessions.map((session, si) => {
+                const sessionVolume = session.entries.reduce((acc, entry) => acc + entry.sets.reduce((a,set) => {
+                  const w = resolveWeight(set.weightRaw, bodyweight); return a + (w != null ? w * set.reps : 0);
+                }, 0), 0);
+                return (
+                  <div key={si} style={{ border:`1px solid ${C.bg3}`, borderRadius:6, overflow:"hidden" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", background:C.bg2, padding:"6px 10px", borderBottom:`1px solid ${C.bg3}` }}>
+                      <span style={{ color:C.orange, fontSize:13 }}>{session.title}</span>
+                      <span style={{ color:C.gray, fontSize:11.5 }}>{sessionVolume.toLocaleString()} lb</span>
+                    </div>
+                    {session.entries.map((entry, ei) => (
+                      <div key={ei} style={{ padding:"8px 10px", borderTop: ei===0 ? "none" : `1px solid ${C.bg3}` }}>
+                        <div style={{ color:C.fg, fontSize:13 }}>{describeExercise(entry, legend)}</div>
+                        <div style={{ color:C.gray, fontSize:10.5, marginBottom:4 }}>{entry.code}{entry.variation ? `.${entry.variation}` : ""}</div>
+                        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:3, margin:0 }}>
+                          {entry.sets.map((set, wi) => (
+                            <div key={wi} style={{ display:"flex", alignItems:"baseline", gap:8, fontSize:12.5 }}>
+                              <span style={{ color:C.gray, width:18 }}>{wi + 1}</span>
+                              <span style={{ color:C.blue }}>{displayWeight(set.weightRaw)}<span style={{ color:C.gray }}>×</span>{set.reps}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {entry.note && <div style={{ color:C.purple, fontStyle:"italic", fontSize:11.5, marginTop:3 }}>{entry.note}</div>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <Panel title="SETTINGS" accent={C.yellow}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <label style={{ fontSize:13, color:C.gray }}>bodyweight (lb)</label>
+              <input className="gl-input" style={{ width:90 }} value={bodyweight}
+                onChange={(e) => setBodyweight(e.target.value.replace(/[^\d.]/g,""))}
+                inputMode="decimal" placeholder="180" />
+            </div>
+          </Panel>
+
+          <Panel title="ALL-TIME SUMMARY" accent={C.orange}>
+            <div style={{ display:"flex", gap:16, marginBottom:10, fontSize:12.5, flexWrap:"wrap" }}>
+              <div><span style={{ color:C.gray }}>sessions </span><span style={{ color:C.green }}>{allTime.sessionCount}</span></div>
+              <div><span style={{ color:C.gray }}>sets </span><span style={{ color:C.green }}>{allTime.totalSets}</span></div>
+              <div><span style={{ color:C.gray }}>volume </span><span style={{ color:C.green }}>{allTime.totalVolume.toLocaleString()} lb</span></div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {allTime.rows.map((row,i) => (
+                <div key={i}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                    <span>{row.label}</span><span style={{ color:C.gray }}>{row.maxWeight != null ? `${row.maxWeight} lb max` : "—"}</span>
+                  </div>
+                  <div style={{ height:5, background:C.bg2, borderRadius:3, marginTop:3, overflow:"hidden" }}>
+                    <div style={{ width:`${Math.max(4,(row.volume/maxRowVolume)*100)}%`, height:"100%", background:C.blue }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="ACCOUNT" accent={C.purple}>
+            {sync.status === "local-only" ? (
+              <div style={{ color:C.gray, fontSize:12 }}>
+                Cloud sync is not configured. The log is saved on this device only.
+              </div>
+            ) : sync.email ? (
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                <span style={{ fontSize:12, overflowWrap:"anywhere" }}>
+                  <span style={{ color:C.gray }}>signed in as </span>{sync.email}
+                </span>
+                <button className="gl-btn" disabled={acct.busy}
+                  onClick={() => acctAction(() => window.ironvimSync.signOut(),
+                    () => ({ email:"", sent:false }))}>sign out</button>
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ color:C.gray, fontSize:12 }}>
+                  Sync this log across devices. We will email you a sign-in link.
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <input className="gl-input" style={{ flex:1, minWidth:0 }} value={acct.email}
+                    onChange={(e) => setAcct((a) => ({ ...a, email:e.target.value }))}
+                    type="email" inputMode="email" autoCapitalize="off" autoCorrect="off"
+                    placeholder="you@email.com" />
+                  <button className="gl-btn" disabled={acct.busy || !acct.email.trim()}
+                    onClick={() => acctAction(() => window.ironvimSync.sendCode(acct.email),
+                      (a) => ({ ...a, sent:true }))}>{acct.sent ? "resend link" : "email sign-in link"}</button>
+                </div>
+                {acct.sent && (
+                  <div style={{ color:C.gray, fontSize:12 }}>
+                    Check your email and open the sign-in link to continue.
+                  </div>
+                )}
+                {acct.error && <div style={{ color:C.red, fontSize:11.5 }}>{acct.error}</div>}
+              </div>
+            )}
+          </Panel>
+
+        </div>
+      </div>
+
+      {showSample && (
+        <Modal title="SAMPLE WORKOUT" accent={C.green} onClose={() => setShowSample(false)}>
+          <div style={{ color:C.gray, fontSize:12, marginBottom:10 }}>
+            An example of the log format. Tap <span style={{ color:C.blue }}>? grammar</span> for the full syntax.
+          </div>
+          <pre style={{ margin:0, background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6,
+            padding:12, fontSize:12.5, lineHeight:1.6, color:C.fg, whiteSpace:"pre-wrap", overflowX:"auto" }}>{SAMPLE_LOG}</pre>
+        </Modal>
+      )}
+
+      {showGrammar && (
+        <Modal title="GRAMMAR" accent={C.blue} onClose={() => setShowGrammar(false)}>
+          <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+            <button className="gl-btn" style={{ flex:1, borderColor:grammarTab === "syntax" ? C.blue : C.bg4, color:grammarTab === "syntax" ? C.blue : C.gray }}
+              onClick={() => setGrammarTab("syntax")}>syntax</button>
+            <button className="gl-btn" style={{ flex:1, borderColor:grammarTab === "variations" ? C.purple : C.bg4, color:grammarTab === "variations" ? C.purple : C.gray }}
+              onClick={() => setGrammarTab("variations")}>variations</button>
+          </div>
+          {grammarTab === "syntax" ? <GrammarReference /> : (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {Object.entries(legend).map(([base,codes]) => Object.keys(codes).length>0 && (
+                <div key={base}>
+                  <div style={{ color:C.orange, fontSize:12, marginBottom:4 }}>{BASE_LABELS[base]||base} <span style={{ color:C.gray }}>({base}.)</span></div>
+                  {Object.entries(codes).map(([code,label]) => (
+                    <div key={code} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0" }}>
+                      <span><span style={{ color:C.blue }}>.{code}</span> = {label}</span>
+                      <button onClick={() => removeLegendEntry(base,code)} style={{ background:"none", border:"none", color:C.gray, minHeight:28, minWidth:28 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                <input className="gl-input" placeholder="base" style={{ width:60 }} value={newLegend.base} onChange={(e)=>setNewLegend(n=>({...n, base:e.target.value.toLowerCase()}))} />
+                <input className="gl-input" placeholder="code" style={{ width:60 }} value={newLegend.code} onChange={(e)=>setNewLegend(n=>({...n, code:e.target.value.toLowerCase()}))} />
+                <input className="gl-input" placeholder="label" style={{ flex:1, minWidth:90 }} value={newLegend.label} onChange={(e)=>setNewLegend(n=>({...n, label:e.target.value}))} />
+                <button className="gl-btn" onClick={addLegendEntry}>+</button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* onClose is deliberately inert: a stray backdrop tap must not discard a workout */}
+      {sync.conflict && (
+        <Modal title="SYNC CONFLICT" accent={C.red} onClose={() => {}}>
+          <div style={{ color:C.gray, fontSize:12, marginBottom:10 }}>
+            This device and the cloud both changed since the last sync. Nothing has been
+            overwritten yet.
+          </div>
+          {[["this device", sync.conflict.local.text], ["cloud copy", sync.conflict.remote.text]].map(([label, body]) => (
+            <div key={label} style={{ marginBottom:10 }}>
+              <div style={{ color:C.orange, fontSize:11.5, marginBottom:4 }}>{label}</div>
+              <pre style={{ margin:0, background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6,
+                padding:10, fontSize:11.5, lineHeight:1.5, color:C.fg, whiteSpace:"pre-wrap",
+                maxHeight:140, overflowY:"auto" }}>{body}</pre>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button className="gl-btn" style={{ flex:1 }}
+              onClick={() => window.ironvimSync.resolveConflict("mine")}>keep mine</button>
+            <button className="gl-btn" style={{ flex:1 }}
+              onClick={() => window.ironvimSync.resolveConflict("cloud")}>use cloud</button>
+            <button className="gl-btn" style={{ flex:1, borderColor:C.green, color:C.green }}
+              onClick={() => window.ironvimSync.resolveConflict("both")}>keep both</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
