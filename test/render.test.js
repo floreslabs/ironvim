@@ -181,6 +181,20 @@ test("highlight follows typing through variation, bw, sets, and comments", () =>
   assert.ok(html.includes("font-style:italic") && html.includes("wide grip"), "comment italicized");
 });
 
+test("editor and highlight layer share exact layout metrics", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+
+  const ta = dom.window.document.querySelector("textarea");
+  const pre = dom.window.document.querySelector(".gl-highlight");
+  assert.strictEqual(ta.style.borderWidth, "0px", "textarea chrome border zeroed so the caret aligns");
+  assert.strictEqual(ta.style.overflow, "hidden", "no scrollbar gutter shifts the wrap points");
+  assert.strictEqual(ta.style.fontSize, "16px", "textarea honors the iOS 16px minimum");
+  assert.strictEqual(pre.style.fontSize, ta.style.fontSize, "highlight layer matches the textarea font size");
+  assert.strictEqual(pre.style.wordBreak, "break-all", "highlight wraps at characters like a textarea");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>

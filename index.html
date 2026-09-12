@@ -417,14 +417,14 @@ function WorkoutModal({ workout, onClose, onChange }) {
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
     width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
-    fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:13,
+    fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16,
   };
   return (
     <Modal title="EDIT WORKOUT" accent={C.green} onClose={onClose}>
       <div style={{ position:"relative", background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6 }}>
         <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
           ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
-          whiteSpace:"pre-wrap", wordBreak:"break-word", color:"transparent",
+          whiteSpace:"pre-wrap", wordBreak:"break-all", color:"transparent",
         }} dangerouslySetInnerHTML={{ __html: highlightLog(workout.body) }} />
         <textarea
           ref={taRef}
@@ -435,8 +435,8 @@ function WorkoutModal({ workout, onClose, onChange }) {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          style={{ ...metrics, position:"relative", resize:"none", background:"transparent",
-            color:"transparent", caretColor:C.fg, WebkitTextFillColor:"transparent", outline:"none" }}
+          style={{ ...metrics, position:"relative", resize:"none", overflow:"hidden", borderStyle:"none", borderWidth:0,
+            background:"transparent", color:"transparent", caretColor:C.fg, WebkitTextFillColor:"transparent", outline:"none" }}
         />
       </div>
       <div style={{ display:"flex", marginTop:10 }}>
