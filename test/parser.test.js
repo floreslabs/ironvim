@@ -6,7 +6,7 @@ const path = require("path");
 
 const src = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 const slice = src.slice(src.indexOf("const ANGLE_LABELS"), src.indexOf("/* ---------------- session header convention"));
-const G = new Function(slice + "; return { tryParseExerciseLine, parseLog, describeExercise, migrateLegend, DEFAULT_LEGEND, SAMPLE_LOG };")();
+const G = new Function(slice + "; return { tryParseExerciseLine, parseLog, describeExercise, migrateLegend, withDefaultLegend, DEFAULT_LEGEND, SAMPLE_LOG };")();
 
 const sets = (line) => {
   const e = G.tryParseExerciseLine(line);
@@ -47,13 +47,30 @@ test("pd is the pulldown code, across angle and equipment prefixes", () => {
   assert.strictEqual(label("cpd"), "Cable Pulldown");
   assert.strictEqual(label("ipd"), "Incline Pulldown");
   assert.strictEqual(label("dpd"), "Decline Pulldown");
-  assert.strictEqual(label("cpd.t"), "Cable Pulldown (Triangle)");
+  assert.strictEqual(label("pd.v"), "Pulldown (V-Bar)");
+  assert.strictEqual(label("cpd.rg"), "Cable Pulldown (Reverse Grip)");
+  assert.strictEqual(label("cpd.s"), "Cable Pulldown (Single Handle)");
+});
+
+test("pulldown keeps v-bar, single handle, reverse grip, and neutral grip variations", () => {
+  assert.deepStrictEqual(G.DEFAULT_LEGEND.pd, { v:"V-Bar", s:"Single Handle", rg:"Reverse Grip", ng:"Neutral Grip" });
+  assert.strictEqual(label("pd.ng"), "Pulldown (Neutral Grip)");
 });
 
 test("retired l code still resolves to pulldown", () => {
   assert.strictEqual(label("l"), "Pulldown");
   assert.strictEqual(label("cl"), "Cable Pulldown");
-  assert.strictEqual(label("l.w"), "Pulldown (Wide Bar)");
+  assert.strictEqual(label("l.ng"), "Pulldown (Neutral Grip)");
+});
+
+test("withDefaultLegend prunes legacy pulldown defaults but keeps edits and additions", () => {
+  const pruned = G.withDefaultLegend({ pd: { t:"Triangle", r:"Rope", w:"Wide Bar", b:"Straight Bar", z:"Custom" } });
+  assert.deepStrictEqual(Object.keys(pruned.pd).sort(), ["ng", "rg", "s", "v", "z"]);
+  assert.strictEqual(pruned.pd.z, "Custom");
+  assert.strictEqual(pruned.pd.s, "Single Handle", "single handle returns via defaults");
+  const renamed = G.withDefaultLegend({ pd: { t:"My Triangle" } });
+  assert.strictEqual(renamed.pd.t, "My Triangle", "a renamed legacy entry survives");
+  assert.strictEqual(renamed.pd.rg, "Reverse Grip", "defaults still apply");
 });
 
 test("legacy di/e/ca codes still normalize to their current base", () => {

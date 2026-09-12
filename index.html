@@ -86,7 +86,7 @@ const DEFAULT_EQUIP = {
   lp:"Machine", lc:"Machine", le:"Machine", cr:"Machine", tp:"Cable", tb:"Barbell", sh:"Barbell",
 };
 const DEFAULT_LEGEND = {
-  pd: { t:"Triangle", s:"Single Handle", v:"V-Bar", r:"Rope", w:"Wide Bar", b:"Straight Bar" },
+  pd: { v:"V-Bar", s:"Single Handle", rg:"Reverse Grip", ng:"Neutral Grip" },
   tp: { b:"Straight Bar", r:"Rope", v:"V-Bar" },
   t: { r:"Rope", v:"V-Bar", b:"Straight Bar" },
   d: { f:"Front", s:"Side", r:"Rear" },
@@ -94,6 +94,9 @@ const DEFAULT_LEGEND = {
   lu: { f:"Forward", r:"Reverse", d:"Decline", x:"Deficit" },
   sh: { b:"Behind the Back" },
 };
+/* default labels retired from the pulldown legend; a saved entry that still
+   matches one is dropped so existing installs see only the current set. */
+const PULLDOWN_LEGACY = { t:"Triangle", r:"Rope", w:"Wide Bar", b:"Straight Bar" };
 const SAMPLE_LOG = `PUSH 09-11
 p 135x8,8,6 "felt strong today
 idbp 60x10,10,8
@@ -265,6 +268,13 @@ function migrateLegend(legend) {
 function withDefaultLegend(legend) {
   const migrated = migrateLegend(legend || {});
   if (migrated.lu && migrated.lu.d === "Decline / Deficit") migrated.lu = { ...migrated.lu, d:"Decline" };
+  if (migrated.pd) {
+    const pd = { ...migrated.pd };
+    Object.entries(PULLDOWN_LEGACY).forEach(([code, label]) => {
+      if (pd[code] === label) delete pd[code];
+    });
+    migrated.pd = pd;
+  }
   return Object.entries(DEFAULT_LEGEND).reduce((next, [base, defaults]) => ({
     ...next,
     [base]: { ...defaults, ...(next[base] || {}) },
