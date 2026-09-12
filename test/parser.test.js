@@ -88,6 +88,28 @@ test("sample log parses into two sessions", () => {
   assert.deepStrictEqual(parsed.map((s) => s.title), ["PUSH 09-11", "LEGS 09-12"]);
 });
 
+test("tb is a T-Bar Row base across equipment and angle forms", () => {
+  assert.strictEqual(label("tb"), "Barbell T-Bar Row");
+  assert.strictEqual(label("mtb"), "Machine T-Bar Row");
+  assert.strictEqual(label("stb"), "Smith Machine T-Bar Row");
+  assert.strictEqual(label("itb"), "Incline Barbell T-Bar Row");
+});
+
+test("sh is a Shrug base across equipment forms", () => {
+  assert.strictEqual(label("sh"), "Barbell Shrug");
+  assert.strictEqual(label("dbsh"), "Dumbbell Shrug");
+  assert.strictEqual(label("msh"), "Machine Shrug");
+  assert.strictEqual(label("ssh"), "Smith Machine Shrug");
+  assert.strictEqual(label("sh.b"), "Barbell Shrug (Behind the Back)");
+});
+
+test("new tb/sh codes do not shadow existing press and equipment forms", () => {
+  assert.strictEqual(label("dp"), "Decline Barbell Press");
+  assert.strictEqual(label("t"), "Barbell Triceps Extension");
+  assert.strictEqual(label("ct.r"), "Cable Triceps Extension (Rope)");
+  assert.strictEqual(label("r"), "Barbell Row");
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log("  pass  " + name); }

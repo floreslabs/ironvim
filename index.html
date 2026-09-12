@@ -74,16 +74,16 @@ const ANGLE_CODES = ["i","d"];
 const BASE_LABELS = {
   p:"Press", c:"Curl", r:"Row", f:"Fly", pd:"Pulldown", tp:"Triceps Pushdown", d:"Delt Raises", t:"Triceps Extension",
   sq:"Squat", dl:"Deadlift", lp:"Leg Press", lc:"Leg Curl", le:"Leg Extension",
-  cr:"Calf Raise", lu:"Lunge", pu:"Pull-Up", dip:"Dip", op:"Overhead Press",
+  cr:"Calf Raise", lu:"Lunge", pu:"Pull-Up", dip:"Dip", op:"Overhead Press", tb:"T-Bar Row", sh:"Shrug",
 };
-const RESERVED_MULTI = ["sq","dl","lp","lc","le","cr","ca","lu","pu","di","dip","op","pd","tp","d","e"];
+const RESERVED_MULTI = ["sq","dl","lp","lc","le","cr","ca","lu","pu","di","dip","op","pd","tp","d","e","tb","sh"];
 /* retired codes that still parse, so older logs keep resolving. not listed in the reference. */
 const BASE_ALIASES = { l:"pd", ca:"cr", e:"d", di:"dip" };
 const resolveBase = (code) => BASE_ALIASES[code] || (BASE_LABELS[code] ? code : null);
 const DEFAULT_EQUIP = {
   p:"Barbell", c:"Barbell", r:"Barbell", f:"Dumbbell", d:"Dumbbell", e:"Dumbbell", t:"Barbell",
   sq:"Barbell", dl:"Barbell", lu:"Bodyweight", pu:"Bodyweight", dip:"Bodyweight", op:"Barbell",
-  lp:"Machine", lc:"Machine", le:"Machine", cr:"Machine", tp:"Cable",
+  lp:"Machine", lc:"Machine", le:"Machine", cr:"Machine", tp:"Cable", tb:"Barbell", sh:"Barbell",
 };
 const DEFAULT_LEGEND = {
   pd: { t:"Triangle", s:"Single Handle", v:"V-Bar", r:"Rope", w:"Wide Bar", b:"Straight Bar" },
@@ -92,6 +92,7 @@ const DEFAULT_LEGEND = {
   d: { f:"Front", s:"Side", r:"Rear" },
   lc: { l:"Lying", s:"Seated" },
   lu: { f:"Forward", r:"Reverse", d:"Decline", x:"Deficit" },
+  sh: { b:"Behind the Back" },
 };
 const SAMPLE_LOG = `PUSH 09-11
 p 135x8,8,6 "felt strong today
