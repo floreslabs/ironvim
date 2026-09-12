@@ -355,26 +355,90 @@ function Modal({ title, accent, onClose, children }) {
   );
 }
 
+/* ---------------- workout editor syntax highlighting ---------------- */
+const EXERCISE_LINE_RE = /(?:bw[+-]?\d*|\d+(?:\.\d+)?)x\d+(?:\.\d+)?/i;
+const NUM_RE = /^(?:bw[+-]?\d*|\d+(?:\.\d+)?)$/i;
+
+function highlightLog(text) {
+  const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return text.split("\n").map((line) => {
+    if (line.trim() === "") return "";
+    if (!EXERCISE_LINE_RE.test(line)) return `<span style="color:${C.orange}">${esc(line)}</span>`;
+
+    let body = line, comment = "";
+    const q = line.indexOf('"');
+    if (q >= 0) { body = line.slice(0, q); comment = line.slice(q); }
+
+    const m = body.match(/^(\S+)(.*)$/);
+    const code = m ? m[1] : body;
+    const rest = m ? m[2] : "";
+
+    const dot = code.indexOf(".");
+    const base = dot >= 0 ? code.slice(0, dot) : code;
+    const variation = dot >= 0 ? code.slice(dot) : "";
+    let html = `<span style="color:${C.purple}">${esc(base)}</span>`;
+    if (variation) html += `<span style="color:${C.blue}">${esc(variation)}</span>`;
+
+    let afterX = false, groupStart = true;
+    const setRe = /(bw[+-]?\d*|\d+(?:\.\d+)?|\D)/gi;
+    let match;
+    while ((match = setRe.exec(rest)) !== null) {
+      const tok = match[0];
+      if (NUM_RE.test(tok)) {
+        html += afterX || !groupStart
+          ? `<span style="color:${C.green}">${esc(tok)}</span>`
+          : `<span style="color:${C.yellow}">${esc(tok)}</span>`;
+        groupStart = false; afterX = false;
+      } else if (/[xX]/.test(tok)) {
+        html += `<span style="color:${C.gray}">x</span>`;
+        afterX = true;
+      } else if (tok === "," || tok === "*") {
+        html += `<span style="color:${C.fg}">${esc(tok)}</span>`;
+      } else {
+        html += esc(tok);
+        if (/\s/.test(tok) || tok === ">") { groupStart = true; afterX = false; }
+      }
+    }
+
+    if (comment) html += `<span style="color:${C.purple};font-style:italic">${esc(comment)}</span>`;
+    return html;
+  }).join("\n");
+}
+
 function WorkoutModal({ workout, onClose, onChange }) {
-  const ref = useRef(null);
+  const taRef = useRef(null);
+  const preRef = useRef(null);
   useEffect(() => {
-    const el = ref.current;
+    const el = taRef.current;
     if (!el) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }, [workout.id]);
+  const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
+  const metrics = {
+    width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
+    fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:13,
+  };
   return (
     <Modal title="EDIT WORKOUT" accent={C.green} onClose={onClose}>
-      <textarea
-        ref={ref}
-        className="gl-editor"
-        value={workout.body}
-        onChange={(e) => onChange(workout.id, e.target.value)}
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
-        style={{ width:"100%", minHeight:260, background:C.bg0, color:C.fg, border:`1px solid ${C.bg3}`, borderRadius:6, outline:"none", padding:12, lineHeight:1.6 }}
-      />
+      <div style={{ position:"relative", background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6 }}>
+        <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
+          ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
+          whiteSpace:"pre-wrap", wordBreak:"break-word", color:"transparent",
+        }} dangerouslySetInnerHTML={{ __html: highlightLog(workout.body) }} />
+        <textarea
+          ref={taRef}
+          className="gl-editor"
+          value={workout.body}
+          onChange={(e) => onChange(workout.id, e.target.value)}
+          onScroll={syncScroll}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          style={{ ...metrics, position:"relative", resize:"none", background:"transparent",
+            color:"transparent", caretColor:C.fg, WebkitTextFillColor:"transparent", outline:"none" }}
+        />
+      </div>
       <div style={{ display:"flex", marginTop:10 }}>
         <button className="gl-btn" style={{ flex:1 }} onClick={onClose}>done</button>
       </div>

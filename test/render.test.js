@@ -141,6 +141,46 @@ test("edit button opens a modal textarea bound to that workout", () => {
   assert.ok(getLocal().workouts[0].body.includes("p 200x5"), "typing in the modal updates the workout collection");
 });
 
+test("edit modal layers a colorized copy of the raw log behind the textarea", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+
+  const ta = dom.window.document.querySelector("textarea");
+  const pre = dom.window.document.querySelector(".gl-highlight");
+  assert.ok(pre, "highlight layer rendered behind the editor");
+  assert.strictEqual(ta.value, "PUSH\np 135x8", "textarea keeps the raw editable text");
+  assert.strictEqual(pre.textContent, "PUSH\np 135x8", "highlight layer mirrors the raw log");
+  const html = pre.innerHTML;
+  assert.ok(html.includes('color:#f39660">PUSH<'), "session header colored");
+  assert.ok(html.includes('color:#b39df3">p<'), "exercise token purple");
+  assert.ok(html.includes('color:#e7c664">135<'), "weight yellow");
+  assert.ok(html.includes('color:#9ed072">8<'), "reps green");
+});
+
+test("highlight follows typing through variation, bw, sets, and comments", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  const ta = dom.window.document.querySelector("textarea");
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+  const next = "SHIFT\nsh.b bw+25x12,12,10 \"wide grip";
+  act(() => {
+    setter.call(ta, next);
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+
+  const pre = dom.window.document.querySelector(".gl-highlight");
+  assert.strictEqual(pre.textContent, next, "layer mirrors edited text");
+  const html = pre.innerHTML;
+  assert.ok(html.includes('color:#f39660">SHIFT<'), "header stays orange");
+  assert.ok(html.includes('color:#b39df3">sh<'), "base token purple");
+  assert.ok(html.includes('color:#76cce0">.b<'), "variation blue");
+  assert.ok(html.includes('color:#e7c664">bw+25<'), "bw weight yellow");
+  assert.ok(html.includes('color:#9ed072">12<') && html.includes('color:#9ed072">10<'), "reps green");
+  assert.ok(html.includes("font-style:italic") && html.includes("wide grip"), "comment italicized");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>
