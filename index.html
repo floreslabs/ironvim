@@ -754,7 +754,7 @@ function App() {
         }
       });
     })));
-    const rows = Object.entries(map).map(([label,v]) => ({ label, ...v })).sort((a,b) => b.volume - a.volume);
+    const rows = Object.entries(map).map(([label,v]) => ({ label, ...v })).sort((a,b) => (b.maxWeight || 0) - (a.maxWeight || 0) || (b.volume - a.volume));
     return { rows, totalVolume, totalSets, sessionCount: sessions.reduce((n, workout) => n + workout.parsed.length, 0) };
   }, [sessions, legend]);
   const maxRowVolume = allTime.rows.length ? allTime.rows[0].volume : 1;

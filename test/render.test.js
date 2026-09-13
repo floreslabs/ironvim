@@ -408,6 +408,20 @@ test("workout card: no header volume, outline-green edit button, all-time row sh
   assert.strictEqual(editBtn.style.background, "", "edit keeps the default dark fill, outline only");
 });
 
+test("all-time rows sort by max weight descending, not volume", () => {
+  const mk = (id, body, ts) => ({ id, body, createdAt: ts, updatedAt: ts, revision: null, dirty: true });
+  const { el } = mountDom({ getStatus: () => "signed-out", init: () => {} }, [
+    mk("w1", "PUSH\np 135x8", "2026-09-12T00:00:00.000Z"),
+    mk("w2", "LEGS\nsq 225x5,5,5\ndl 315x3", "2026-09-13T00:00:00.000Z"),
+  ]);
+  const html = el.innerHTML;
+  const i315 = html.indexOf("315 lb max × 3");
+  const i225 = html.indexOf("225 lb max × 5");
+  const i135 = html.indexOf("135 lb max × 8");
+  assert.ok(i315 !== -1 && i225 !== -1 && i135 !== -1, "all three exercise rows render");
+  assert.ok(i315 < i225 && i225 < i135, "rows sort by max weight (315 > 225 > 135), not volume (225's 3375 is highest)");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>
