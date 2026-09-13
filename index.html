@@ -252,6 +252,25 @@ function describeExercise(entry, legend) {
   return label;
 }
 
+/* Flattens a session's exercises into the P4 code-column table: one row per
+   set, the code + resolved name + note shown only on each group's first row. */
+function buildSetTable(entries, legend) {
+  const rows = [];
+  for (const entry of entries) {
+    entry.sets.forEach((set, i) => {
+      rows.push({
+        code: i === 0 ? entry.code : null,
+        name: i === 0 ? describeExercise(entry, legend) : null,
+        note: i === 0 ? (entry.note || null) : null,
+        weight: displayWeight(set.weightRaw),
+        reps: set.reps,
+        first: i === 0,
+      });
+    });
+  }
+  return rows;
+}
+
 /* Saved legends are keyed by base code, so a retired code hands its labels to the
    current one. Without this, a legend persisted under the old key would silently
    drop its variation names. */
@@ -700,21 +719,33 @@ function App() {
                         <button className="gl-btn" style={{ minHeight:30, minWidth:48, padding:"4px 8px" }} onClick={() => editWorkout(workout.id)}>edit</button>
                       </div>
                     </div>
-                    {session.entries.map((entry, ei) => (
-                      <div key={ei} style={{ padding:"8px 10px", borderTop: ei===0 ? "none" : `1px solid ${C.bg3}` }}>
-                        <div style={{ color:C.fg, fontSize:13 }}>{describeExercise(entry, legend)}</div>
-                        <div style={{ color:C.gray, fontSize:10.5, marginBottom:4 }}>{entry.code}{entry.variation ? `.${entry.variation}` : ""}</div>
-                        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:3, margin:0 }}>
-                          {entry.sets.map((set, wi) => (
-                            <div key={wi} style={{ display:"flex", alignItems:"baseline", gap:8, fontSize:12.5 }}>
-                              <span style={{ color:C.gray, width:18 }}>{wi + 1}</span>
-                              <span style={{ color:C.blue }}>{displayWeight(set.weightRaw)}<span style={{ color:C.gray }}>×</span>{set.reps}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {entry.note && <div style={{ color:C.purple, fontStyle:"italic", fontSize:11.5, marginTop:3 }}>{entry.note}</div>}
-                      </div>
-                    ))}
+                    <div style={{ padding:"4px 10px 10px" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                        <thead>
+                          <tr>
+                            <td style={{ padding:"6px 10px", color:C.gray, fontSize:10, letterSpacing:".08em" }}>CODE</td>
+                            <td style={{ padding:"6px 10px", color:C.gray, fontSize:10, letterSpacing:".08em" }}>EXERCISE</td>
+                            <td style={{ padding:"6px 10px", textAlign:"right", color:C.gray, fontSize:10, letterSpacing:".08em" }}>WEIGHT</td>
+                            <td style={{ padding:"6px 10px", textAlign:"right", color:C.gray, fontSize:10, letterSpacing:".08em" }}>REPS</td>
+                          </tr>
+                        </thead>
+                        <tbody>
+                        {buildSetTable(session.entries, legend).map((row, ri) => (
+                          <tr key={ri} style={{ borderTop:`1px solid ${row.first ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.06)"}` }}>
+                            <td style={{ padding:"6px 10px", fontFamily:"ui-monospace,Menlo,Consolas,monospace", fontSize:12, color: row.code ? C.blue : C.gray }}>
+                              {row.code || "·"}
+                            </td>
+                            <td style={{ padding:"6px 10px", fontSize:12, color: row.name ? C.fg : C.gray }}>
+                              {row.name || "·"}
+                              {row.note && <div style={{ color:C.purple, fontStyle:"italic", fontSize:10.5 }}>{row.note}</div>}
+                            </td>
+                            <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:"ui-monospace,Menlo,Consolas,monospace", fontSize:12, color:C.blue }}>{row.weight}</td>
+                            <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:"ui-monospace,Menlo,Consolas,monospace", fontSize:12, color:C.green }}>{row.reps}</td>
+                          </tr>
+                        ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               }))}

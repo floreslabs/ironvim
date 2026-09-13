@@ -51,7 +51,7 @@ function mount(syncStub) {
 }
 
 function exports_() {
-  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection };")(React);
+  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection, ...(typeof buildSetTable === \"function\" ? { buildSetTable } : {}) };")(React);
 }
 
 const tests = [];
@@ -281,6 +281,54 @@ test("edit modal highlights the active row with the sonokai cursorline color", (
   act(() => { ta.setSelectionRange(2, 2); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   html = pre.innerHTML;
   assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#f89860">PUSH<'), "highlight moves to the header row");
+});
+
+test("buildSetTable flattens exercises into a code-column table", () => {
+  const { buildSetTable } = exports_();
+  const rows = buildSetTable([
+    { code:"le", base:"le", angle:null, equipment:null, variation:null, note:"ascending",
+      sets:[{ weightRaw:"120", reps:12 },{ weightRaw:"140", reps:10 },{ weightRaw:"160", reps:8 }] },
+    { code:"p", base:"p", angle:null, equipment:null, variation:null, note:null,
+      sets:[{ weightRaw:"135", reps:8 },{ weightRaw:"135", reps:6 }] },
+  ], {});
+  assert.strictEqual(rows.length, 5, "one table row per set");
+  assert.strictEqual(rows[0].code, "le", "code shown on the group's first row");
+  assert.strictEqual(rows[0].name, "Machine Leg Extension", "name resolved on the group's first row");
+  assert.strictEqual(rows[0].note, "ascending", "note rides the first row");
+  assert.strictEqual(rows[0].weight, "120 lb", "weight cell holds the display weight");
+  assert.strictEqual(rows[0].reps, 12, "reps cell holds the raw reps");
+  assert.strictEqual(rows[1].code, null, "continuation rows drop the code");
+  assert.strictEqual(rows[1].name, null, "continuation rows drop the name");
+  assert.strictEqual(rows[1].note, null, "note only on the first row");
+  assert.deepStrictEqual(rows.map((r) => r.weight), ["120 lb","140 lb","160 lb","135 lb","135 lb"]);
+  assert.deepStrictEqual(rows.map((r) => r.reps), [12,10,8,8,6]);
+  assert.strictEqual(rows[3].name, "Barbell Press", "second group re-names on its own first row");
+});
+
+test("buildSetTable resolves variations and names each group once", () => {
+  const { buildSetTable } = exports_();
+  const rows = buildSetTable([
+    { code:"sh.rg", base:"sh", angle:null, equipment:null, variation:"rg", note:"wide grip",
+      sets:[{ weightRaw:"25", reps:12 },{ weightRaw:"25", reps:12 },{ weightRaw:"25", reps:10 }] },
+  ], {});
+  assert.strictEqual(rows[0].code, "sh.rg", "full typed token in the code column");
+  assert.strictEqual(rows[0].name, "Barbell Shrug (RG)", "variation folded into the name");
+  assert.strictEqual(rows[0].note, "wide grip");
+  assert.strictEqual(rows[1].name, null);
+  assert.strictEqual(rows[2].name, null);
+  assert.strictEqual(rows[2].note, null);
+});
+
+test("workouts panel renders a light code-column table", () => {
+  const html = mount(undefined);
+  assert.ok(html.includes(">CODE<"), "code column header");
+  assert.ok(html.includes(">EXERCISE<"), "exercise column header");
+  assert.ok(html.includes(">WEIGHT<"), "weight column header");
+  assert.ok(html.includes(">REPS<"), "reps column header");
+  assert.ok(html.includes("Barbell Press"), "exercise name on the first row");
+  assert.ok(html.includes("135 lb"), "weight cell shows the display weight");
+  assert.ok(html.includes(">8<"), "reps cell for the single p set");
+  assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
 
 test("every sync status maps to a label", () => {
