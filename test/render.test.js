@@ -40,7 +40,7 @@ function mountDom(syncStub) {
   const ReactDOMClient = require("react-dom/client");
   const act = React.act;
 
-  const { App } = new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtCaret };")(React);
+  const { App } = new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection };")(React);
   const el = dom.window.document.getElementById("root");
   act(() => { ReactDOMClient.createRoot(el).render(React.createElement(App)); });
   return { dom, el, act };
@@ -51,7 +51,7 @@ function mount(syncStub) {
 }
 
 function exports_() {
-  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtCaret };")(React);
+  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection };")(React);
 }
 
 const tests = [];
@@ -202,14 +202,15 @@ test("editor and highlight layer share exact layout metrics", () => {
   assert.strictEqual(pre.style.wordBreak, "break-all", "highlight wraps at characters like a textarea");
 });
 
-test("exercise label follows the caret line", () => {
-  const { exerciseLabelAtCaret } = exports_();
+test("exercise label follows the selection range across a line", () => {
+  const { exerciseLabelAtSelection } = exports_();
   const body = "PUSH 09-11\np 135x8\nsh.rg 25x12,12,10 \"wide grip";
-  assert.strictEqual(exerciseLabelAtCaret("", 0, {}), null, "empty body has no label");
-  assert.strictEqual(exerciseLabelAtCaret(body, 10, {}), null, "header line has no label");
-  assert.strictEqual(exerciseLabelAtCaret(body, 13, {}), null, "partial lines have no label");
-  assert.strictEqual(exerciseLabelAtCaret(body, 18, {}), "Barbell Press", "caret at the end of the p line");
-  assert.strictEqual(exerciseLabelAtCaret(body, body.length, {}), "Barbell Shrug (RG)", "caret in the noted sh.rg line");
+  assert.strictEqual(exerciseLabelAtSelection("", 0, 0, {}), null, "empty body has no label");
+  assert.strictEqual(exerciseLabelAtSelection(body, 10, 10, {}), null, "header line has no label");
+  assert.strictEqual(exerciseLabelAtSelection(body, 18, 18, {}), "Barbell Press", "collapsed caret at the end of the p line");
+  assert.strictEqual(exerciseLabelAtSelection(body, 13, 15, {}), "Barbell Press", "selecting any character of the p line labels it");
+  assert.strictEqual(exerciseLabelAtSelection(body, 12, 18, {}), "Barbell Press", "selection spanning the p line from a space");
+  assert.strictEqual(exerciseLabelAtSelection(body, 30, 40, {}), "Barbell Shrug (RG)", "selection inside the noted sh.rg line");
 });
 
 test("edit modal status bar shows the exercise at the caret", () => {
@@ -221,8 +222,11 @@ test("edit modal status bar shows the exercise at the caret", () => {
   const labelEl = dom.window.document.querySelector(".gl-exercise-label");
   assert.ok(labelEl, "status bar rendered in the modal");
 
-  act(() => { ta.setSelectionRange(5, 5); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
-  assert.ok(labelEl.textContent.includes("—"), "header line shows the placeholder");
+  act(() => { ta.setSelectionRange(2, 2); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(labelEl.textContent.includes("—"), "caret inside the header line shows the placeholder");
+
+  act(() => { ta.setSelectionRange(8, 12); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(labelEl.textContent.includes("Barbell Press"), "selecting part of the p line labels it");
 
   act(() => { ta.setSelectionRange(15, 15); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   assert.ok(labelEl.textContent.includes("Barbell Press"), "caret on the p line shows the press label");

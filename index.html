@@ -398,12 +398,18 @@ function highlightLog(text) {
   }).join("\n");
 }
 
-/* Human-readable name of the exercise whose line holds the caret at `at`.
-   Partial lines, headers, and blanks return null until they parse. */
-function exerciseLabelAtCaret(body, at, legend) {
+/* Human-readable name of the exercise whose line intersects the selection
+   [start, end]. Any selected or caret-touched character pulls in the full line,
+   so partial selections still name the exercise they belong to. */
+function exerciseLabelAtSelection(body, start, end, legend) {
   if (!body) return null;
-  const pos = Math.max(0, Math.min(at, body.length));
-  const line = body.slice(0, pos).split("\n").pop();
+  const lo = Math.max(0, Math.min(start, end));
+  const hi = Math.max(lo, Math.min(body.length, Math.max(start, end)));
+  const lineStart = body.lastIndexOf("\n", hi === 0 ? 0 : hi - 1) + 1;
+  const nl = body.indexOf("\n", hi);
+  const lineEnd = nl === -1 ? body.length : nl;
+  if (lo > lineEnd) return null;
+  const line = body.slice(lineStart, lineEnd);
   const q = line.indexOf('"');
   const mainPart = (q === -1 ? line : line.slice(0, q)).trim();
   if (!mainPart) return null;
@@ -414,16 +420,22 @@ function exerciseLabelAtCaret(body, at, legend) {
 function WorkoutModal({ workout, legend, onClose, onChange }) {
   const taRef = useRef(null);
   const preRef = useRef(null);
-  const [caret, setCaret] = useState(0);
-  const syncCaret = () => { const el = taRef.current; if (el) setCaret(el.selectionStart == null ? el.value.length : el.selectionStart); };
+  const [selection, setSelection] = useState({ start:0, end:0 });
+  const syncCaret = () => {
+    const el = taRef.current;
+    if (!el) return;
+    const start = el.selectionStart == null ? 0 : el.selectionStart;
+    const end = el.selectionEnd == null ? start : el.selectionEnd;
+    setSelection({ start, end });
+  };
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
-    setCaret(el.value.length);
+    setSelection({ start:el.value.length, end:el.value.length });
   }, [workout.id]);
-  const exerciseLabel = useMemo(() => exerciseLabelAtCaret(workout.body, caret, legend), [workout.body, caret, legend]);
+  const exerciseLabel = useMemo(() => exerciseLabelAtSelection(workout.body, selection.start, selection.end, legend), [workout.body, selection.start, selection.end, legend]);
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
     width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
