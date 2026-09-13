@@ -396,10 +396,14 @@ test("workouts panel renders a light code-column table", () => {
   assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
 
-test("workout card: no header volume, outline-green edit button, all-time row shows max and the inline 80%", () => {
+test("workout card: no header volume, outline-green edit button, all-time is a mini table with an 80% column", () => {
   const { dom } = mountDom({ getStatus: () => "signed-out", init: () => {} });
   const html = dom.window.document.getElementById("root").innerHTML;
-  assert.ok(html.includes("135 lb max × 8 · 80% 108 lb"), "the all-time row shows max with reps and the inline 80% working weight");
+  assert.ok(html.includes("EXERCISE"), "the column header for the exercise name");
+  assert.ok(html.includes("MAX"), "the column header for the max-weight column");
+  assert.ok(html.includes("80%"), "the column header for the working-weight column");
+  assert.ok(html.includes("135 lb × 8"), "the max column shows max weight with the reps at it");
+  assert.ok(html.includes("108 lb"), "the 80% column computes 80% of 135 and rounds it");
   const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
   assert.ok(editBtn, "edit button present");
   assert.ok(!editBtn.parentElement.textContent.includes("lb"), "no volume label rides next to the edit button");
@@ -415,9 +419,9 @@ test("all-time rows sort by max weight descending, not volume", () => {
     mk("w2", "LEGS\nsq 225x5,5,5\ndl 315x3", "2026-09-13T00:00:00.000Z"),
   ]);
   const html = el.innerHTML;
-  const i315 = html.indexOf("315 lb max × 3");
-  const i225 = html.indexOf("225 lb max × 5");
-  const i135 = html.indexOf("135 lb max × 8");
+  const i315 = html.indexOf("315 lb × 3");
+  const i225 = html.indexOf("225 lb × 5");
+  const i135 = html.indexOf("135 lb × 8");
   assert.ok(i315 !== -1 && i225 !== -1 && i135 !== -1, "all three exercise rows render");
   assert.ok(i315 < i225 && i225 < i135, "rows sort by max weight (315 > 225 > 135), not volume (225's 3375 is highest)");
 });
