@@ -152,10 +152,10 @@ test("edit modal layers a colorized copy of the raw log behind the textarea", ()
   assert.strictEqual(ta.value, "PUSH\np 135x8", "textarea keeps the raw editable text");
   assert.strictEqual(pre.textContent, "PUSH\np 135x8", "highlight layer mirrors the raw log");
   const html = pre.innerHTML;
-  assert.ok(html.includes('color:#f39660">PUSH<'), "session header colored");
-  assert.ok(html.includes('color:#b39df3">p<'), "exercise token purple");
-  assert.ok(html.includes('color:#e7c664">135<'), "weight yellow");
-  assert.ok(html.includes('color:#9ed072">8<'), "reps green");
+  assert.ok(html.includes('color:#f89860">PUSH<'), "session header colored");
+  assert.ok(html.includes('color:#bb97ee">p<'), "exercise token purple");
+  assert.ok(html.includes('color:#edc763">135<'), "weight yellow");
+  assert.ok(html.includes('color:#9ed06c">8<'), "reps green");
 });
 
 test("highlight follows typing through variation, sets, comments, and bw removal", () => {
@@ -173,19 +173,19 @@ test("highlight follows typing through variation, sets, comments, and bw removal
   const pre = dom.window.document.querySelector(".gl-highlight");
   assert.strictEqual(pre.textContent, next, "layer mirrors edited text");
   const html = pre.innerHTML;
-  assert.ok(html.includes('color:#f39660">SHIFT<'), "header stays orange");
-  assert.ok(html.includes('color:#b39df3">sh<'), "base token purple");
-  assert.ok(html.includes('color:#76cce0">.rg<'), "variation blue");
-  assert.ok(html.includes('color:#e7c664">25<'), "weight yellow");
-  assert.ok(html.includes('color:#9ed072">12<') && html.includes('color:#9ed072">10<'), "reps green");
-  assert.ok(html.includes("font-style:italic") && html.includes("wide grip"), "comment italicized");
+  assert.ok(html.includes('color:#f89860">SHIFT<'), "header stays orange");
+  assert.ok(html.includes('color:#bb97ee">sh<'), "base token purple");
+  assert.ok(html.includes('color:#6dcae8">.rg<'), "variation blue");
+  assert.ok(html.includes('color:#edc763">25<'), "weight yellow");
+  assert.ok(html.includes('color:#9ed06c">12<') && html.includes('color:#9ed06c">10<'), "reps green");
+  assert.ok(html.includes('color:#7e8294;font-style:italic') && html.includes("wide grip"), "comment gray italic");
 
   const bw = "PUSH\np bw+25x8";
   act(() => {
     setter.call(ta, bw);
     ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   });
-  assert.ok(!pre.innerHTML.includes('color:#e7c664">bw'), "bw is not highlighted as a weight");
+  assert.ok(!pre.innerHTML.includes('color:#edc763">bw'), "bw is not highlighted as a weight");
 });
 
 test("editor and highlight layer share exact layout metrics", () => {
@@ -250,13 +250,13 @@ test("edit modal highlights the active row with the sonokai cursorline color", (
 
   act(() => { ta.setSelectionRange(12, 12); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   let html = pre.innerHTML;
-  assert.ok(html.includes('<span class="gl-active-line" style="display:inline-block;width:100%;background:#33353f">'), "active row is a full-width inline block (no block-level box, so no orphan line)");
-  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#b39df3">p<'), "highlight wraps the p line");
+  assert.ok(html.includes('<span class="gl-active-line" style="display:inline-block;width:100%;background:#333648">'), "active row is a full-width inline block (no block-level box, so no orphan line)");
+  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#bb97ee">p<'), "highlight wraps the p line");
   assert.strictEqual(pre.textContent, "PUSH\np 135x8", "the highlight background leaves the mirrored text intact");
 
   act(() => { ta.setSelectionRange(2, 2); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   html = pre.innerHTML;
-  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#f39660">PUSH<'), "highlight moves to the header row");
+  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#f89860">PUSH<'), "highlight moves to the header row");
 });
 
 test("every sync status maps to a label", () => {

@@ -65,6 +65,12 @@ const C = {
   fg:"#e2e2e3", red:"#fc5d7c", orange:"#f39660", yellow:"#e7c664",
   green:"#9ed072", blue:"#76cce0", purple:"#b39df3", gray:"#7f8490",
 };
+/* Sonokai "andromeda" style — used only for the edit-workout highlight layer. */
+const A = {
+  bg0:"#2b2d3a", bg1:"#333648", bg2:"#363a4e", bg3:"#393e53", bg4:"#3f445b",
+  fg:"#e1e3e4", red:"#fb617e", orange:"#f89860", yellow:"#edc763",
+  green:"#9ed06c", blue:"#6dcae8", purple:"#bb97ee", gray:"#7e8294",
+};
 
 /* ---------------- grammar tables ---------------- */
 const ANGLE_LABELS = { i:"Incline", d:"Decline" };
@@ -324,7 +330,7 @@ function GrammarReference() {
   );
 }
 
-function Modal({ title, accent, onClose, children }) {
+function Modal({ title, accent, onClose, children, palette = C }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -333,12 +339,12 @@ function Modal({ title, accent, onClose, children }) {
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"#1b1c2199", display:"flex",
       alignItems:"center", justifyContent:"center", padding:12, zIndex:50 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background:C.bg1, border:`1px solid ${C.bg4}`,
+      <div onClick={(e) => e.stopPropagation()} style={{ background:palette.bg1, border:`1px solid ${palette.bg4}`,
         borderRadius:8, width:"100%", maxWidth:520, maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.bg2, borderBottom:`1px solid ${C.bg3}` }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:palette.bg2, borderBottom:`1px solid ${palette.bg3}` }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ width:6, height:6, borderRadius:"50%", background:accent||C.blue, display:"inline-block" }} />
-            <span style={{ color:C.gray, fontSize:12.5, letterSpacing:0.3 }}>{title}</span>
+            <span style={{ width:6, height:6, borderRadius:"50%", background:accent||palette.blue, display:"inline-block" }} />
+            <span style={{ color:palette.gray, fontSize:12.5, letterSpacing:0.3 }}>{title}</span>
           </div>
           <button className="gl-btn" style={{ minHeight:32, minWidth:32, padding:6 }} onClick={onClose}>✕</button>
         </div>
@@ -352,14 +358,14 @@ function Modal({ title, accent, onClose, children }) {
 const EXERCISE_LINE_RE = /\d+(?:\.\d+)?x\d+(?:\.\d+)?/i;
 const NUM_RE = /^\d+(?:\.\d+)?$/i;
 
-function highlightLog(text, activeLine = -1) {
+function highlightLog(text, activeLine = -1, pal = C) {
   const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   return text.split("\n").map((line, i) => {
     let html;
     if (line.trim() === "") {
       html = "";
     } else if (!EXERCISE_LINE_RE.test(line)) {
-      html = `<span style="color:${C.orange}">${esc(line)}</span>`;
+      html = `<span style="color:${pal.orange}">${esc(line)}</span>`;
     } else {
       let body = line, comment = "";
       const q = line.indexOf('"');
@@ -372,8 +378,8 @@ function highlightLog(text, activeLine = -1) {
       const dot = code.indexOf(".");
       const base = dot >= 0 ? code.slice(0, dot) : code;
       const variation = dot >= 0 ? code.slice(dot) : "";
-      html = `<span style="color:${C.purple}">${esc(base)}</span>`;
-      if (variation) html += `<span style="color:${C.blue}">${esc(variation)}</span>`;
+      html = `<span style="color:${pal.purple}">${esc(base)}</span>`;
+      if (variation) html += `<span style="color:${pal.blue}">${esc(variation)}</span>`;
 
       let afterX = false, groupStart = true;
       const setRe = /(\d+(?:\.\d+)?|\D)/gi;
@@ -382,23 +388,23 @@ function highlightLog(text, activeLine = -1) {
         const tok = match[0];
         if (NUM_RE.test(tok)) {
           html += afterX || !groupStart
-            ? `<span style="color:${C.green}">${esc(tok)}</span>`
-            : `<span style="color:${C.yellow}">${esc(tok)}</span>`;
+            ? `<span style="color:${pal.green}">${esc(tok)}</span>`
+            : `<span style="color:${pal.yellow}">${esc(tok)}</span>`;
           groupStart = false; afterX = false;
         } else if (/[xX]/.test(tok)) {
-          html += `<span style="color:${C.gray}">x</span>`;
+          html += `<span style="color:${pal.gray}">x</span>`;
           afterX = true;
         } else if (tok === "," || tok === "*") {
-          html += `<span style="color:${C.fg}">${esc(tok)}</span>`;
+          html += `<span style="color:${pal.fg}">${esc(tok)}</span>`;
         } else {
           html += esc(tok);
           if (/\s/.test(tok) || tok === ">") { groupStart = true; afterX = false; }
         }
       }
 
-      if (comment) html += `<span style="color:${C.purple};font-style:italic">${esc(comment)}</span>`;
+      if (comment) html += `<span style="color:${pal.gray};font-style:italic">${esc(comment)}</span>`;
     }
-    if (i === activeLine) html = `<span class="gl-active-line" style="display:inline-block;width:100%;background:${C.bg1}">${html}</span>`;
+    if (i === activeLine) html = `<span class="gl-active-line" style="display:inline-block;width:100%;background:${pal.bg1}">${html}</span>`;
     return html;
   }).join("\n");
 }
@@ -451,7 +457,7 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
   const exerciseLabel = useMemo(() => exerciseLabelAtSelection(workout.body, selection.start, selection.end, legend), [workout.body, selection.start, selection.end, legend]);
   const highlighted = useMemo(() => {
     const lineInfo = selectionLine(workout.body, selection.start, selection.end);
-    return highlightLog(workout.body, lineInfo ? lineInfo.index : -1);
+    return highlightLog(workout.body, lineInfo ? lineInfo.index : -1, A);
   }, [workout.body, selection.start, selection.end]);
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
@@ -459,8 +465,8 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
     fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16,
   };
   return (
-    <Modal title="EDIT WORKOUT" accent={C.green} onClose={onClose}>
-      <div style={{ position:"relative", background:C.bg0, border:`1px solid ${C.bg3}`, borderRadius:6 }}>
+    <Modal title="EDIT WORKOUT" accent={A.green} onClose={onClose} palette={A}>
+      <div style={{ position:"relative", background:A.bg0, border:`1px solid ${A.bg3}`, borderRadius:6 }}>
         <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
           ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
           whiteSpace:"pre-wrap", wordBreak:"break-all", color:"transparent",
@@ -478,14 +484,14 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
           autoCapitalize="off"
           autoCorrect="off"
           style={{ ...metrics, position:"relative", resize:"none", overflow:"hidden", borderStyle:"none", borderWidth:0,
-            background:"transparent", color:"transparent", caretColor:C.fg, WebkitTextFillColor:"transparent", outline:"none" }}
+            background:"transparent", color:"transparent", caretColor:A.fg, WebkitTextFillColor:"transparent", outline:"none" }}
         />
       </div>
-      <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${C.bg3}`, display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:18 }}>
-        <span style={{ fontSize:11, color:C.gray, textTransform:"uppercase", letterSpacing:1 }}>exercise</span>
+      <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${A.bg3}`, display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:18 }}>
+        <span style={{ fontSize:11, color:A.gray, textTransform:"uppercase", letterSpacing:1 }}>exercise</span>
         {exerciseLabel
-          ? <span className="gl-exercise-label" style={{ fontSize:12.5, color:C.green, textAlign:"right" }}>{exerciseLabel}</span>
-          : <span className="gl-exercise-label" style={{ fontSize:12.5, color:C.gray, fontStyle:"italic" }}>—</span>}
+          ? <span className="gl-exercise-label" style={{ fontSize:12.5, color:A.green, textAlign:"right" }}>{exerciseLabel}</span>
+          : <span className="gl-exercise-label" style={{ fontSize:12.5, color:A.gray, fontStyle:"italic" }}>—</span>}
       </div>
       <div style={{ display:"flex", marginTop:10 }}>
         <button className="gl-btn" style={{ flex:1 }} onClick={onClose}>done</button>
