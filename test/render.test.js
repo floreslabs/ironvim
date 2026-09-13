@@ -40,7 +40,7 @@ function mountDom(syncStub) {
   const ReactDOMClient = require("react-dom/client");
   const act = React.act;
 
-  const { App } = new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS };")(React);
+  const { App } = new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtCaret };")(React);
   const el = dom.window.document.getElementById("root");
   act(() => { ReactDOMClient.createRoot(el).render(React.createElement(App)); });
   return { dom, el, act };
@@ -51,7 +51,7 @@ function mount(syncStub) {
 }
 
 function exports_() {
-  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS };")(React);
+  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtCaret };")(React);
 }
 
 const tests = [];
@@ -200,6 +200,40 @@ test("editor and highlight layer share exact layout metrics", () => {
   assert.strictEqual(ta.style.fontSize, "16px", "textarea honors the iOS 16px minimum");
   assert.strictEqual(pre.style.fontSize, ta.style.fontSize, "highlight layer matches the textarea font size");
   assert.strictEqual(pre.style.wordBreak, "break-all", "highlight wraps at characters like a textarea");
+});
+
+test("exercise label follows the caret line", () => {
+  const { exerciseLabelAtCaret } = exports_();
+  const body = "PUSH 09-11\np 135x8\nsh.rg 25x12,12,10 \"wide grip";
+  assert.strictEqual(exerciseLabelAtCaret("", 0, {}), null, "empty body has no label");
+  assert.strictEqual(exerciseLabelAtCaret(body, 10, {}), null, "header line has no label");
+  assert.strictEqual(exerciseLabelAtCaret(body, 13, {}), null, "partial lines have no label");
+  assert.strictEqual(exerciseLabelAtCaret(body, 18, {}), "Barbell Press", "caret at the end of the p line");
+  assert.strictEqual(exerciseLabelAtCaret(body, body.length, {}), "Barbell Shrug (RG)", "caret in the noted sh.rg line");
+});
+
+test("edit modal status bar shows the exercise at the caret", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+
+  const ta = dom.window.document.querySelector("textarea");
+  const labelEl = dom.window.document.querySelector(".gl-exercise-label");
+  assert.ok(labelEl, "status bar rendered in the modal");
+
+  act(() => { ta.setSelectionRange(5, 5); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(labelEl.textContent.includes("—"), "header line shows the placeholder");
+
+  act(() => { ta.setSelectionRange(15, 15); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(labelEl.textContent.includes("Barbell Press"), "caret on the p line shows the press label");
+
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+  act(() => {
+    setter.call(ta, "PUSH\nsh.b 25x12");
+    ta.setSelectionRange("PUSH\nsh.b 25x12".length, "PUSH\nsh.b 25x12".length);
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  assert.ok(labelEl.textContent.includes("Barbell Shrug (Behind the Back)"), "typing a shrug updates the label");
 });
 
 test("every sync status maps to a label", () => {
