@@ -684,7 +684,7 @@ function App() {
             </div>
           </Panel>
 
-          <Panel title="PARSED SESSIONS" accent={C.blue}>
+          <Panel title="WORKOUTS" accent={C.blue}>
             {sessions.length === 0 && <div style={{ color:C.gray, fontSize:13 }}>No entries yet.</div>}
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
               {sessions.flatMap((workout) => workout.parsed.map((session, si) => {
