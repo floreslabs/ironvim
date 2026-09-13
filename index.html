@@ -439,6 +439,65 @@ function selectionLine(body, start, end) {
   return { lineStart, lineEnd, index: (body.slice(0, lineStart).match(/\n/g) || []).length };
 }
 
+/* Editor gutter: the workout body always ends up with one visual row per source
+   line in the textarea, but soft wrapping can split a line across several rows.
+   These helpers give the gutter its numbers: one cell per source line, sized to
+   however many visual rows that line really occupies. */
+const GL_ROW_PX = 16 * 1.6;
+
+function lineOffsets(body) {
+  const out = [];
+  let start = 0, i = 0;
+  while (i < body.length) {
+    const nl = body.indexOf("\n", i);
+    if (nl === -1) { out.push({ start, end: body.length }); break; }
+    out.push({ start, end: nl });
+    start = nl + 1; i = nl + 1;
+    if (i === body.length) out.push({ start, end: i });
+  }
+  if (body === "") out.push({ start: 0, end: 0 });
+  return out;
+}
+
+function countSourceLines(body) {
+  return body.split("\n").length;
+}
+
+/* Measures each source line's real visual rows against the highlight layer's
+   layout (Range rects: one per wrapped fragment). Falls back to 1 row per line
+   whenever the DOM can't lay out (jsdom, prerender, selection glitches), so the
+   gutter is always at least as tall as the plain line count. */
+function visualRowCounts(preEl, body) {
+  const lines = lineOffsets(body);
+  const out = lines.map(() => 1);
+  if (!preEl) return out;
+  try {
+    const doc = preEl.ownerDocument;
+    const nodes = [];
+    const walker = doc.createTreeWalker(preEl, 4, null);
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    if (!nodes.length) return out;
+    const offsets = [];
+    let acc = 0;
+    for (const node of nodes) { offsets.push(acc); acc += node.data.length; }
+    const range = doc.createRange();
+    for (let i = 0; i < out.length; i++) {
+      const { start, end } = lines[i];
+      if (end <= start) continue;
+      for (let k = nodes.length - 1; k >= 0; k--) {
+        if (offsets[k] <= start) { range.setStart(nodes[k], start - offsets[k]); break; }
+      }
+      for (let k = nodes.length - 1; k >= 0; k--) {
+        if (offsets[k] <= end) { range.setEnd(nodes[k], end - offsets[k]); break; }
+      }
+      const rects = typeof range.getClientRects === "function" ? range.getClientRects() : [];
+      if (rects.length > 1) out[i] = rects.length;
+    }
+  } catch (e) { /* no layout: keep one row per line */ }
+  return out;
+}
+
 /* A line that only has a code token (no weight×reps yet, or a broken set count)
    still resolves to its exercise, so the label follows keystroke by keystroke
    while typing. Headers and unknown tokens stay null. */
@@ -467,7 +526,9 @@ function exerciseLabelAtSelection(body, start, end, legend) {
 function WorkoutModal({ workout, legend, onClose, onChange }) {
   const taRef = useRef(null);
   const preRef = useRef(null);
+  const editRef = useRef(null);
   const [selection, setSelection] = useState({ start:0, end:0 });
+  const [rowCounts, setRowCounts] = useState(null);
   const syncCaret = () => {
     const el = taRef.current;
     if (!el) return;
@@ -482,38 +543,67 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
     el.setSelectionRange(el.value.length, el.value.length);
     setSelection({ start:el.value.length, end:el.value.length });
   }, [workout.id]);
+  useEffect(() => {
+    const pre = preRef.current;
+    if (!pre) return;
+    const run = () => setRowCounts(visualRowCounts(pre, workout.body));
+    run();
+    let ro = null;
+    const region = editRef.current;
+    if (region && typeof ResizeObserver === "function") {
+      ro = new ResizeObserver(run);
+      ro.observe(region);
+    }
+    return () => { if (ro) ro.disconnect(); };
+  }, [workout.body]);
   const exerciseLabel = useMemo(() => exerciseLabelAtSelection(workout.body, selection.start, selection.end, legend), [workout.body, selection.start, selection.end, legend]);
-  const highlighted = useMemo(() => {
+  const activeIndex = useMemo(() => {
     const lineInfo = selectionLine(workout.body, selection.start, selection.end);
-    return highlightLog(workout.body, lineInfo ? lineInfo.index : -1, A);
+    return lineInfo ? lineInfo.index : -1;
   }, [workout.body, selection.start, selection.end]);
+  const highlighted = useMemo(() => highlightLog(workout.body, activeIndex, A), [workout.body, activeIndex]);
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
     width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
     fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16,
   };
+  const lineCount = countSourceLines(workout.body);
   return (
     <Modal title="EDIT WORKOUT" accent={A.green} onClose={onClose} palette={A}>
-      <div style={{ position:"relative", background:A.bg0, border:`1px solid ${A.bg3}`, borderRadius:6 }}>
-        <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
-          ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
-          whiteSpace:"pre-wrap", wordBreak:"break-all", color:"transparent",
-        }} dangerouslySetInnerHTML={{ __html: highlighted }} />
-        <textarea
-          ref={taRef}
-          className="gl-editor"
-          value={workout.body}
-          onChange={(e) => onChange(workout.id, e.target.value) + syncCaret()}
-          onScroll={syncScroll}
-          onSelect={syncCaret}
-          onKeyUp={syncCaret}
-          onClick={syncCaret}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          style={{ ...metrics, position:"relative", resize:"none", overflow:"hidden", borderStyle:"none", borderWidth:0,
-            background:"transparent", color:"transparent", caretColor:A.fg, WebkitTextFillColor:"transparent", outline:"none" }}
-        />
+      <div style={{ display:"flex", background:A.bg0, border:`1px solid ${A.bg3}`, borderRadius:6, overflow:"hidden" }}>
+        <div className="gl-gutter" style={{
+          flexShrink:0, width:42, padding:"12px 0", textAlign:"right", userSelect:"none",
+          background:A.bg0, borderRight:`1px solid ${A.bg3}`, color:A.gray, overflow:"hidden",
+          fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16, lineHeight:1.6,
+        }}>
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i} className="gl-gutter-line" style={{
+              height: ((rowCounts ? rowCounts[i] : 1) || 1) * GL_ROW_PX + "px",
+              paddingRight:10, color: i === activeIndex ? A.blue : A.gray,
+            }}>{i + 1}</div>
+          ))}
+        </div>
+        <div ref={editRef} style={{ position:"relative", flex:1, minWidth:0 }}>
+          <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
+            ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
+            whiteSpace:"pre-wrap", wordBreak:"break-all", color:"transparent",
+          }} dangerouslySetInnerHTML={{ __html: highlighted }} />
+          <textarea
+            ref={taRef}
+            className="gl-editor"
+            value={workout.body}
+            onChange={(e) => onChange(workout.id, e.target.value) + syncCaret()}
+            onScroll={syncScroll}
+            onSelect={syncCaret}
+            onKeyUp={syncCaret}
+            onClick={syncCaret}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            style={{ ...metrics, position:"relative", resize:"none", overflow:"hidden", borderStyle:"none", borderWidth:0,
+              background:"transparent", color:"transparent", caretColor:A.fg, WebkitTextFillColor:"transparent", outline:"none" }}
+          />
+        </div>
       </div>
       <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${A.bg3}`, display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:18 }}>
         <span style={{ fontSize:11, color:A.gray, textTransform:"uppercase", letterSpacing:1 }}>exercise</span>

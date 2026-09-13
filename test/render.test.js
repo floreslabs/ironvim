@@ -51,7 +51,7 @@ function mount(syncStub) {
 }
 
 function exports_() {
-  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection, ...(typeof buildSetTable === \"function\" ? { buildSetTable } : {}) };")(React);
+  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection, ...(typeof buildSetTable === \"function\" ? { buildSetTable } : {}), ...(typeof countSourceLines === \"function\" ? { countSourceLines } : {}), ...(typeof lineOffsets === \"function\" ? { lineOffsets } : {}) };")(React);
 }
 
 const tests = [];
@@ -281,6 +281,51 @@ test("edit modal highlights the active row with the sonokai cursorline color", (
   act(() => { ta.setSelectionRange(2, 2); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   html = pre.innerHTML;
   assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#f89860">PUSH<'), "highlight moves to the header row");
+});
+
+test("countSourceLines counts editable rows including a trailing empty line", () => {
+  const { countSourceLines } = exports_();
+  assert.strictEqual(countSourceLines(""), 1, "empty body still has one blank row");
+  assert.strictEqual(countSourceLines("PUSH\np 135x8"), 2);
+  assert.strictEqual(countSourceLines("PUSH\np 135x8\n"), 3, "trailing newline adds a blank row");
+  assert.strictEqual(countSourceLines("\n\n"), 3);
+});
+
+test("lineOffsets maps each source line to its byte range", () => {
+  const { lineOffsets } = exports_();
+  assert.deepStrictEqual(lineOffsets(""), [{ start:0, end:0 }], "an empty body is a single blank row");
+  assert.deepStrictEqual(lineOffsets("PUSH\np 135x8"), [{ start:0, end:4 }, { start:5, end:12 }]);
+  assert.deepStrictEqual(lineOffsets("PUSH\n"), [{ start:0, end:4 }, { start:5, end:5 }], "trailing newline yields an empty final line");
+  assert.deepStrictEqual(lineOffsets("a\nb\nc"), [{ start:0, end:1 }, { start:2, end:3 }, { start:4, end:5 }]);
+});
+
+test("edit modal gutter numbers one cell per source line with the active line blue", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+
+  const ta = dom.window.document.querySelector("textarea");
+  const gutter = dom.window.document.querySelector(".gl-gutter");
+  assert.ok(gutter, "gutter column rendered");
+  const cells = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
+  assert.strictEqual(cells.length, 2, "one gutter cell per source line");
+  assert.deepStrictEqual(cells.map((c) => c.textContent), ["1", "2"], "numbers count from 1");
+
+  assert.strictEqual(gutter.style.fontFamily, ta.style.fontFamily, "gutter uses the editor font");
+  assert.strictEqual(gutter.style.fontSize, ta.style.fontSize, "gutter matches the editor font size");
+  assert.strictEqual(gutter.style.lineHeight, ta.style.lineHeight, "gutter row height matches the editor");
+
+  assert.strictEqual(cells[1].style.color, "rgb(109, 202, 232)", "the active (last) line number is blue");
+  assert.strictEqual(cells[0].style.color, "rgb(126, 130, 148)", "inactive numbers stay gray");
+  assert.strictEqual(cells[0].style.height, "25.6px", "unwrapped rows are one editor row tall");
+
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+  act(() => {
+    setter.call(ta, "PUSH\np 135x8\n");
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  const after = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
+  assert.strictEqual(after.length, 3, "a trailing newline adds a gutter cell");
 });
 
 test("buildSetTable flattens exercises into a code-column table", () => {
