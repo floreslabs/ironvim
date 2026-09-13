@@ -26,8 +26,8 @@
   #root { min-height:100vh; padding-bottom: env(safe-area-inset-bottom); }
   ::selection { background:#b39df355; }
   textarea, input, select { font-family: inherit; }
-  /* iOS: inputs must be >=16px or Safari force-zooms on focus */
-  textarea.gl-editor, input.gl-input { font-size:16px !important; }
+  /* iOS: inputs must be >=16px or Safari force-zooms on focus; the editor opts out at 13px */
+  textarea.gl-editor, input.gl-input { font-size:13px !important; }
   textarea.gl-editor { scrollbar-width:thin; scrollbar-color:var(--bg4) var(--bg1); }
   textarea.gl-editor::-webkit-scrollbar { width:8px; }
   textarea.gl-editor::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:5px; }
@@ -443,7 +443,7 @@ function selectionLine(body, start, end) {
    line in the textarea, but soft wrapping can split a line across several rows.
    These helpers give the gutter its numbers: one cell per source line, sized to
    however many visual rows that line really occupies. */
-const GL_ROW_PX = 16 * 1.6;
+const GL_ROW_PX = 13 * 1.6;
 
 function lineOffsets(body) {
   const out = [];
@@ -575,16 +575,16 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
     width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
-    fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16,
+    fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:13,
   };
   const lineCount = countSourceLines(workout.body);
   return (
     <Modal title="EDIT WORKOUT" accent={A.green} onClose={onClose} palette={A}>
       <div style={{ display:"flex", background:A.bg0, border:`1px solid ${A.bg3}`, borderRadius:6, overflow:"hidden" }}>
         <div className="gl-gutter" style={{
-          flexShrink:0, width:42, padding:"12px 0", textAlign:"right", userSelect:"none",
+          flexShrink:0, width:36, padding:"12px 0", textAlign:"right", userSelect:"none",
           background:A.bg0, borderRight:`1px solid ${A.bg3}`, color:A.gray, overflow:"hidden",
-          fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:16, lineHeight:1.6,
+          fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize:13, lineHeight:1.6,
         }}>
           {Array.from({ length: lineCount }, (_, i) => (
             <div key={i} className="gl-gutter-line" style={{

@@ -1,4 +1,4 @@
-const CACHE = "ironvim-v17";
+const CACHE = "ironvim-v18";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg",
                 "./supabase-config.js", "./workouts.js", "./sync.js"];
 

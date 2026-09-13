@@ -199,7 +199,7 @@ test("editor and highlight layer share exact layout metrics", () => {
   const pre = dom.window.document.querySelector(".gl-highlight");
   assert.strictEqual(ta.style.borderWidth, "0px", "textarea chrome border zeroed so the caret aligns");
   assert.strictEqual(ta.style.overflow, "hidden", "no scrollbar gutter shifts the wrap points");
-  assert.strictEqual(ta.style.fontSize, "16px", "textarea honors the iOS 16px minimum");
+  assert.strictEqual(ta.style.fontSize, "13px", "textarea editor font is the chosen 13px");
   assert.strictEqual(pre.style.fontSize, ta.style.fontSize, "highlight layer matches the textarea font size");
   assert.strictEqual(pre.style.wordBreak, "break-all", "highlight wraps at characters like a textarea");
 });
@@ -319,7 +319,7 @@ test("edit modal gutter numbers one cell per source line with the active line bl
 
   assert.strictEqual(cells[1].style.color, "rgb(109, 202, 232)", "the active (last) line number is blue");
   assert.strictEqual(cells[0].style.color, "rgb(126, 130, 148)", "inactive numbers stay gray");
-  assert.strictEqual(cells[0].style.height, "25.6px", "unwrapped rows are one editor row tall");
+  assert.strictEqual(cells[0].style.height, "20.8px", "unwrapped rows are one editor row tall at 13px × 1.6");
 
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
   act(() => {
