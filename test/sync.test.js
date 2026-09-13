@@ -314,6 +314,26 @@ test("removing a previously synchronized local row deletes its remote row", asyn
   assert.ok(calls.some((call) => call.kind === "delete" && call.filters.id === "push-1"));
 });
 
+test("empty workout is dropped locally and never written to the server", async () => {
+  const local = { workouts: [localWorkout("empty-1", "")], legend: {} };
+  const sync = reset(local, { remote: [], session: true });
+  await sync.init(hooksFor(local));
+  assert.deepStrictEqual(remote, [], "no server row is created");
+  assert.deepStrictEqual(local.workouts, [], "the empty workout is dropped from local state");
+  assert.ok(!calls.some((call) => call.kind === "insert" && call.payload.id === "empty-1"), "no insert for the empty body");
+  assert.strictEqual(last(statuses), "synced");
+});
+
+test("empty local workout deletes its remote row", async () => {
+  const local = { workouts: [localWorkout("empty-1", "   \n  ")], legend: {} };
+  const sync = reset(local, { remote: [makeRemote("empty-1", "PUSH\np 135x8", 4)], session: true });
+  await sync.init(hooksFor(local));
+  assert.deepStrictEqual(remote, [], "the remote row is deleted");
+  assert.deepStrictEqual(local.workouts, [], "the empty workout is dropped locally");
+  assert.ok(calls.some((call) => call.kind === "delete" && call.filters.id === "empty-1"), "delete is issued for the empty workout");
+  assert.strictEqual(last(statuses), "synced");
+});
+
 test("untouched local samples stay local when the account has no workouts", async () => {
   const local = { workouts: [localWorkout("sample-1", "sample", null, true)], untouched: true };
   const sync = reset(local, { remote: [], session: true });

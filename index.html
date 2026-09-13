@@ -721,6 +721,13 @@ function App() {
 
   const editWorkout = useCallback((id) => setEditingId(id), []);
 
+  const deleteWorkout = useCallback((id) => {
+    if (!workouts.some((w) => w.id === id)) return;
+    if (typeof window !== "undefined" && window.confirm && !window.confirm("Delete this workout?")) return;
+    setWorkouts((prev) => prev.filter((w) => w.id !== id));
+    if (editingId === id) setEditingId(null);
+  }, [workouts, editingId]);
+
   useEffect(() => {
     const h = setTimeout(() => {
       if (workoutApi) workoutApi.saveLocalWorkouts(localStorage, workouts);
@@ -809,6 +816,7 @@ function App() {
                     <div style={{ display:"flex", justifyContent:"space-between", background:C.bg2, padding:"6px 10px", borderBottom:`1px solid ${C.bg3}` }}>
                       <span style={{ color:C.orange, fontSize:13 }}>{session.title}</span>
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <button className="gl-btn" aria-label="delete workout" style={{ minHeight:30, minWidth:30, padding:"4px 6px", borderColor:C.red, color:C.red }} onClick={() => deleteWorkout(workout.id)}>✕</button>
                         <button className="gl-btn" style={{ minHeight:30, minWidth:48, padding:"4px 8px", borderColor:C.green, color:C.green }} onClick={() => editWorkout(workout.id)}>edit</button>
                       </div>
                     </div>

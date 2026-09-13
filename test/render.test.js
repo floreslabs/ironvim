@@ -422,6 +422,27 @@ test("all-time rows sort by max weight descending, not volume", () => {
   assert.ok(i315 < i225 && i225 < i135, "rows sort by max weight (315 > 225 > 135), not volume (225's 3375 is highest)");
 });
 
+test("card delete button asks for confirmation before removing the workout", async () => {
+  let notified = 0;
+  const { dom, el, act } = mountDom({
+    getStatus: () => "signed-out",
+    init: () => {},
+    notifyChange: () => { notified += 1; },
+  });
+  const btns = [...dom.window.document.querySelectorAll("button")].filter((b) => b.textContent.trim() === "✕");
+  assert.strictEqual(btns.length, 1, "a delete button rides next to edit");
+
+  dom.window.confirm = () => false;
+  act(() => { btns[0].dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(el.innerHTML.includes("PUSH"), "declining the prompt keeps the workout card");
+
+  dom.window.confirm = () => true;
+  act(() => { btns[0].dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  assert.ok(!el.innerHTML.includes("PUSH"), "confirming removes the workout card");
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.ok(notified > 0, "the removal notifies the sync layer");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>

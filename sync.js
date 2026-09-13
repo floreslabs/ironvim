@@ -222,6 +222,11 @@
       seen[id] = true;
       var remote = remoteById[id];
 
+      if (String(local.body != null ? local.body : "").trim() === "") {
+        if (remote) return deleteWorkout(id).then(function () {});
+        return Promise.resolve();
+      }
+
       if (local.deleted) {
         if (!remote) return Promise.resolve();
         return deleteWorkout(id).then(function () {});
