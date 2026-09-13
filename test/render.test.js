@@ -394,6 +394,17 @@ test("workouts panel renders a light code-column table", () => {
   assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
 
+test("workout card: no header volume, edit button in brand blue, all-time row shows reps at max weight", () => {
+  const { dom } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const html = dom.window.document.getElementById("root").innerHTML;
+  assert.ok(html.includes("135 lb max × 8"), "the all-time row includes the reps at the max weight");
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  assert.ok(editBtn, "edit button present");
+  assert.ok(!editBtn.parentElement.textContent.includes("lb"), "no volume label rides next to the edit button");
+  assert.strictEqual(editBtn.style.background, "rgb(118, 204, 224)", "edit stands out in brand blue");
+  assert.strictEqual(editBtn.style.color, "rgb(44, 46, 52)", "edit text rides dark on the brand fill");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>
