@@ -51,7 +51,7 @@ function mount(syncStub) {
 }
 
 function exports_() {
-  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection, ...(typeof buildSetTable === \"function\" ? { buildSetTable } : {}), ...(typeof countSourceLines === \"function\" ? { countSourceLines } : {}), ...(typeof lineOffsets === \"function\" ? { lineOffsets } : {}) };")(React);
+  return new Function("React", compile() + "; return { App, GrammarReference, Modal, SYNC_LABELS, exerciseLabelAtSelection, ...(typeof buildSetTable === \"function\" ? { buildSetTable } : {}), ...(typeof countSourceLines === \"function\" ? { countSourceLines } : {}), ...(typeof lineOffsets === \"function\" ? { lineOffsets } : {}), ...(typeof rowSpanCount === \"function\" ? { rowSpanCount } : {}) };")(React);
 }
 
 const tests = [];
@@ -326,6 +326,15 @@ test("edit modal gutter numbers one cell per source line with the active line bl
   });
   const after = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
   assert.strictEqual(after.length, 3, "a trailing newline adds a gutter cell");
+});
+
+test("rowSpanCount collapses per-fragment rects into distinct visual rows", () => {
+  const { rowSpanCount } = exports_();
+  assert.strictEqual(rowSpanCount([]), 1, "no layout data → one row");
+  assert.strictEqual(rowSpanCount([10]), 1);
+  assert.strictEqual(rowSpanCount([10.2, 10.4, 10.0]), 1, "many inline fragments on one visual row collapse to 1");
+  assert.strictEqual(rowSpanCount([10, 35.6]), 2, "a wrapped line reports one top per visual row");
+  assert.strictEqual(rowSpanCount([10, 35.6, 35.61, 61.2]), 3);
 });
 
 test("buildSetTable flattens exercises into a code-column table", () => {

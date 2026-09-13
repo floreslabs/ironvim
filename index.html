@@ -463,6 +463,16 @@ function countSourceLines(body) {
   return body.split("\n").length;
 }
 
+/* The highlight layer wraps one token per inline span, so a Range over a line
+   reports a rect per span box, not per visual row. Collapse on rounded tops:
+   every fragment sharing a row line is one row, which is also how many rows the
+   textarea gives that line. */
+function rowSpanCount(rectTops) {
+  const tops = new Set();
+  for (const t of rectTops) tops.add(Math.round(t));
+  return tops.size || 1;
+}
+
 /* Measures each source line's real visual rows against the highlight layer's
    layout (Range rects: one per wrapped fragment). Falls back to 1 row per line
    whenever the DOM can't lay out (jsdom, prerender, selection glitches), so the
@@ -492,7 +502,7 @@ function visualRowCounts(preEl, body) {
         if (offsets[k] <= end) { range.setEnd(nodes[k], end - offsets[k]); break; }
       }
       const rects = typeof range.getClientRects === "function" ? range.getClientRects() : [];
-      if (rects.length > 1) out[i] = rects.length;
+      out[i] = rowSpanCount(Array.prototype.map.call(rects, (r) => r.top));
     }
   } catch (e) { /* no layout: keep one row per line */ }
   return out;
