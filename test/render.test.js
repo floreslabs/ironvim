@@ -240,6 +240,25 @@ test("edit modal status bar shows the exercise at the caret", () => {
   assert.ok(labelEl.textContent.includes("Barbell Shrug (Behind the Back)"), "typing a shrug updates the label");
 });
 
+test("edit modal highlights the active row with the sonokai cursorline color", () => {
+  const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
+  const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
+  act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+
+  const ta = dom.window.document.querySelector("textarea");
+  const pre = dom.window.document.querySelector(".gl-highlight");
+
+  act(() => { ta.setSelectionRange(12, 12); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  let html = pre.innerHTML;
+  assert.ok(html.includes('<span class="gl-active-line" style="display:block;background:#33353f">'), "active line gets a full-width sonokai cursorline background");
+  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#b39df3">p<'), "highlight wraps the p line");
+  assert.strictEqual(pre.textContent, "PUSH\np 135x8", "the highlight background leaves the mirrored text intact");
+
+  act(() => { ta.setSelectionRange(2, 2); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
+  html = pre.innerHTML;
+  assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#f39660">PUSH<'), "highlight moves to the header row");
+});
+
 test("every sync status maps to a label", () => {
   const { SYNC_LABELS } = exports_();
   ["local-only", "signed-out", "syncing", "synced", "offline", "conflict"].forEach((s) =>

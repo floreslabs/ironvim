@@ -352,56 +352,61 @@ function Modal({ title, accent, onClose, children }) {
 const EXERCISE_LINE_RE = /\d+(?:\.\d+)?x\d+(?:\.\d+)?/i;
 const NUM_RE = /^\d+(?:\.\d+)?$/i;
 
-function highlightLog(text) {
+function highlightLog(text, activeLine = -1) {
   const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  return text.split("\n").map((line) => {
-    if (line.trim() === "") return "";
-    if (!EXERCISE_LINE_RE.test(line)) return `<span style="color:${C.orange}">${esc(line)}</span>`;
+  return text.split("\n").map((line, i) => {
+    let html;
+    if (line.trim() === "") {
+      html = "";
+    } else if (!EXERCISE_LINE_RE.test(line)) {
+      html = `<span style="color:${C.orange}">${esc(line)}</span>`;
+    } else {
+      let body = line, comment = "";
+      const q = line.indexOf('"');
+      if (q >= 0) { body = line.slice(0, q); comment = line.slice(q); }
 
-    let body = line, comment = "";
-    const q = line.indexOf('"');
-    if (q >= 0) { body = line.slice(0, q); comment = line.slice(q); }
+      const m = body.match(/^(\S+)(.*)$/);
+      const code = m ? m[1] : body;
+      const rest = m ? m[2] : "";
 
-    const m = body.match(/^(\S+)(.*)$/);
-    const code = m ? m[1] : body;
-    const rest = m ? m[2] : "";
+      const dot = code.indexOf(".");
+      const base = dot >= 0 ? code.slice(0, dot) : code;
+      const variation = dot >= 0 ? code.slice(dot) : "";
+      html = `<span style="color:${C.purple}">${esc(base)}</span>`;
+      if (variation) html += `<span style="color:${C.blue}">${esc(variation)}</span>`;
 
-    const dot = code.indexOf(".");
-    const base = dot >= 0 ? code.slice(0, dot) : code;
-    const variation = dot >= 0 ? code.slice(dot) : "";
-    let html = `<span style="color:${C.purple}">${esc(base)}</span>`;
-    if (variation) html += `<span style="color:${C.blue}">${esc(variation)}</span>`;
-
-    let afterX = false, groupStart = true;
-    const setRe = /(\d+(?:\.\d+)?|\D)/gi;
-    let match;
-    while ((match = setRe.exec(rest)) !== null) {
-      const tok = match[0];
-      if (NUM_RE.test(tok)) {
-        html += afterX || !groupStart
-          ? `<span style="color:${C.green}">${esc(tok)}</span>`
-          : `<span style="color:${C.yellow}">${esc(tok)}</span>`;
-        groupStart = false; afterX = false;
-      } else if (/[xX]/.test(tok)) {
-        html += `<span style="color:${C.gray}">x</span>`;
-        afterX = true;
-      } else if (tok === "," || tok === "*") {
-        html += `<span style="color:${C.fg}">${esc(tok)}</span>`;
-      } else {
-        html += esc(tok);
-        if (/\s/.test(tok) || tok === ">") { groupStart = true; afterX = false; }
+      let afterX = false, groupStart = true;
+      const setRe = /(\d+(?:\.\d+)?|\D)/gi;
+      let match;
+      while ((match = setRe.exec(rest)) !== null) {
+        const tok = match[0];
+        if (NUM_RE.test(tok)) {
+          html += afterX || !groupStart
+            ? `<span style="color:${C.green}">${esc(tok)}</span>`
+            : `<span style="color:${C.yellow}">${esc(tok)}</span>`;
+          groupStart = false; afterX = false;
+        } else if (/[xX]/.test(tok)) {
+          html += `<span style="color:${C.gray}">x</span>`;
+          afterX = true;
+        } else if (tok === "," || tok === "*") {
+          html += `<span style="color:${C.fg}">${esc(tok)}</span>`;
+        } else {
+          html += esc(tok);
+          if (/\s/.test(tok) || tok === ">") { groupStart = true; afterX = false; }
+        }
       }
-    }
 
-    if (comment) html += `<span style="color:${C.purple};font-style:italic">${esc(comment)}</span>`;
+      if (comment) html += `<span style="color:${C.purple};font-style:italic">${esc(comment)}</span>`;
+    }
+    if (i === activeLine) html = `<span class="gl-active-line" style="display:block;background:${C.bg1}">${html}</span>`;
     return html;
   }).join("\n");
 }
 
-/* Human-readable name of the exercise whose line intersects the selection
-   [start, end]. Any selected or caret-touched character pulls in the full line,
-   so partial selections still name the exercise they belong to. */
-function exerciseLabelAtSelection(body, start, end, legend) {
+/* The single line intersecting the selection [start, end]: its byte offsets and
+   0-based index. Any selected or caret-touched character pulls in the full line,
+   so partial selections still resolve to the line they belong to. */
+function selectionLine(body, start, end) {
   if (!body) return null;
   const lo = Math.max(0, Math.min(start, end));
   const hi = Math.max(lo, Math.min(body.length, Math.max(start, end)));
@@ -409,7 +414,15 @@ function exerciseLabelAtSelection(body, start, end, legend) {
   const nl = body.indexOf("\n", hi);
   const lineEnd = nl === -1 ? body.length : nl;
   if (lo > lineEnd) return null;
-  const line = body.slice(lineStart, lineEnd);
+  return { lineStart, lineEnd, index: (body.slice(0, lineStart).match(/\n/g) || []).length };
+}
+
+/* Human-readable name of the exercise whose line intersects the selection
+   [start, end]. */
+function exerciseLabelAtSelection(body, start, end, legend) {
+  const lineInfo = selectionLine(body, start, end);
+  if (!lineInfo) return null;
+  const line = body.slice(lineInfo.lineStart, lineInfo.lineEnd);
   const q = line.indexOf('"');
   const mainPart = (q === -1 ? line : line.slice(0, q)).trim();
   if (!mainPart) return null;
@@ -436,6 +449,10 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
     setSelection({ start:el.value.length, end:el.value.length });
   }, [workout.id]);
   const exerciseLabel = useMemo(() => exerciseLabelAtSelection(workout.body, selection.start, selection.end, legend), [workout.body, selection.start, selection.end, legend]);
+  const highlighted = useMemo(() => {
+    const lineInfo = selectionLine(workout.body, selection.start, selection.end);
+    return highlightLog(workout.body, lineInfo ? lineInfo.index : -1);
+  }, [workout.body, selection.start, selection.end]);
   const syncScroll = () => { if (preRef.current && taRef.current) preRef.current.scrollTop = taRef.current.scrollTop; };
   const metrics = {
     width:"100%", minHeight:260, padding:12, lineHeight:1.6, boxSizing:"border-box",
@@ -447,7 +464,7 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
         <pre ref={preRef} className="gl-highlight" aria-hidden="true" style={{
           ...metrics, position:"absolute", inset:0, margin:0, overflow:"hidden",
           whiteSpace:"pre-wrap", wordBreak:"break-all", color:"transparent",
-        }} dangerouslySetInnerHTML={{ __html: highlightLog(workout.body) }} />
+        }} dangerouslySetInnerHTML={{ __html: highlighted }} />
         <textarea
           ref={taRef}
           className="gl-editor"
