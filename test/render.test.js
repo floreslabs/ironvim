@@ -250,7 +250,7 @@ test("edit modal highlights the active row with the sonokai cursorline color", (
 
   act(() => { ta.setSelectionRange(12, 12); ta.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   let html = pre.innerHTML;
-  assert.ok(html.includes('<span class="gl-active-line" style="display:block;background:#33353f">'), "active line gets a full-width sonokai cursorline background");
+  assert.ok(html.includes('<span class="gl-active-line" style="display:inline-block;width:100%;background:#33353f">'), "active row is a full-width inline block (no block-level box, so no orphan line)");
   assert.ok(html.indexOf('class="gl-active-line"') < html.indexOf('color:#b39df3">p<'), "highlight wraps the p line");
   assert.strictEqual(pre.textContent, "PUSH\np 135x8", "the highlight background leaves the mirrored text intact");
 

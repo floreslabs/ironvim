@@ -398,7 +398,7 @@ function highlightLog(text, activeLine = -1) {
 
       if (comment) html += `<span style="color:${C.purple};font-style:italic">${esc(comment)}</span>`;
     }
-    if (i === activeLine) html = `<span class="gl-active-line" style="display:block;background:${C.bg1}">${html}</span>`;
+    if (i === activeLine) html = `<span class="gl-active-line" style="display:inline-block;width:100%;background:${C.bg1}">${html}</span>`;
     return html;
   }).join("\n");
 }
