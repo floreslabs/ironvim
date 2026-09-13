@@ -235,9 +235,6 @@ function parseLog(text) {
 function resolveWeight(weightRaw) {
   return parseFloat(weightRaw);
 }
-function displayWeight(weightRaw) {
-  return `${weightRaw} lb`;
-}
 function describeExercise(entry, legend) {
   const parts = [];
   if (entry.angle) parts.push(ANGLE_LABELS[entry.angle]);
@@ -262,7 +259,7 @@ function buildSetTable(entries, legend) {
         code: i === 0 ? entry.code : null,
         name: i === 0 ? describeExercise(entry, legend) : null,
         note: i === 0 ? (entry.note || null) : null,
-        weight: displayWeight(set.weightRaw),
+        weight: set.weightRaw,
         reps: set.reps,
         first: i === 0,
       });
@@ -725,7 +722,7 @@ function App() {
                           <tr>
                             <td style={{ padding:"6px 10px", color:C.gray, fontSize:10, letterSpacing:".08em" }}>CODE</td>
                             <td style={{ padding:"6px 10px", color:C.gray, fontSize:10, letterSpacing:".08em" }}>EXERCISE</td>
-                            <td style={{ padding:"6px 10px", textAlign:"right", color:C.gray, fontSize:10, letterSpacing:".08em" }}>WEIGHT</td>
+                            <td style={{ padding:"6px 10px", textAlign:"right", color:C.gray, fontSize:10, letterSpacing:".08em" }}>WEIGHT (LB)</td>
                             <td style={{ padding:"6px 10px", textAlign:"right", color:C.gray, fontSize:10, letterSpacing:".08em" }}>REPS</td>
                           </tr>
                         </thead>

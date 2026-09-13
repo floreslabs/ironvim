@@ -295,12 +295,12 @@ test("buildSetTable flattens exercises into a code-column table", () => {
   assert.strictEqual(rows[0].code, "le", "code shown on the group's first row");
   assert.strictEqual(rows[0].name, "Machine Leg Extension", "name resolved on the group's first row");
   assert.strictEqual(rows[0].note, "ascending", "note rides the first row");
-  assert.strictEqual(rows[0].weight, "120 lb", "weight cell holds the display weight");
+  assert.strictEqual(rows[0].weight, "120", "weight cell holds the raw weight, no unit (the column carries lb)");
   assert.strictEqual(rows[0].reps, 12, "reps cell holds the raw reps");
   assert.strictEqual(rows[1].code, null, "continuation rows drop the code");
   assert.strictEqual(rows[1].name, null, "continuation rows drop the name");
   assert.strictEqual(rows[1].note, null, "note only on the first row");
-  assert.deepStrictEqual(rows.map((r) => r.weight), ["120 lb","140 lb","160 lb","135 lb","135 lb"]);
+  assert.deepStrictEqual(rows.map((r) => r.weight), ["120","140","160","135","135"]);
   assert.deepStrictEqual(rows.map((r) => r.reps), [12,10,8,8,6]);
   assert.strictEqual(rows[3].name, "Barbell Press", "second group re-names on its own first row");
 });
@@ -323,10 +323,11 @@ test("workouts panel renders a light code-column table", () => {
   const html = mount(undefined);
   assert.ok(html.includes(">CODE<"), "code column header");
   assert.ok(html.includes(">EXERCISE<"), "exercise column header");
-  assert.ok(html.includes(">WEIGHT<"), "weight column header");
+  assert.ok(html.includes(">WEIGHT (LB)<"), "weight column header");
   assert.ok(html.includes(">REPS<"), "reps column header");
   assert.ok(html.includes("Barbell Press"), "exercise name on the first row");
-  assert.ok(html.includes("135 lb"), "weight cell shows the display weight");
+  assert.ok(html.includes(">WEIGHT (LB)<"), "weight column header carries the unit");
+  assert.ok(html.includes(">135<"), "weight cell shows the unitless number");
   assert.ok(html.includes(">8<"), "reps cell for the single p set");
   assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
