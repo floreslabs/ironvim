@@ -590,7 +590,7 @@ function WorkoutModal({ workout, legend, onClose, onChange }) {
             <div key={i} className="gl-gutter-line" style={{
               height: ((rowCounts ? rowCounts[i] : 1) || 1) * GL_ROW_PX + "px",
               paddingRight:10, color: i === activeIndex ? A.blue : A.gray,
-            }}>{i + 1}</div>
+            }}>{i === 0 ? "" : i}</div>
           ))}
         </div>
         <div ref={editRef} style={{ position:"relative", flex:1, minWidth:0 }}>

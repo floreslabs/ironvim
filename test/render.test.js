@@ -309,7 +309,7 @@ test("edit modal gutter numbers one cell per source line with the active line bl
   assert.ok(gutter, "gutter column rendered");
   const cells = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
   assert.strictEqual(cells.length, 2, "one gutter cell per source line");
-  assert.deepStrictEqual(cells.map((c) => c.textContent), ["1", "2"], "numbers count from 1");
+  assert.deepStrictEqual(cells.map((c) => c.textContent), ["", "1"], "the title row is blank and numbering starts at 1 on the second row");
 
   assert.strictEqual(gutter.style.fontFamily, ta.style.fontFamily, "gutter uses the editor font");
   assert.strictEqual(gutter.style.fontSize, ta.style.fontSize, "gutter matches the editor font size");
@@ -326,6 +326,14 @@ test("edit modal gutter numbers one cell per source line with the active line bl
   });
   const after = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
   assert.strictEqual(after.length, 3, "a trailing newline adds a gutter cell");
+  assert.deepStrictEqual(after.map((c) => c.textContent), ["", "1", "2"], "numbering continues past the blank title row");
+
+  act(() => {
+    setter.call(ta, "p 135x8\nct.r 60x12");
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  const noTitle = [...dom.window.document.querySelectorAll(".gl-gutter-line")];
+  assert.deepStrictEqual(noTitle.map((c) => c.textContent), ["", "1"], "the first body row is always treated as the title");
 });
 
 test("rowSpanCount collapses per-fragment rects into distinct visual rows", () => {
