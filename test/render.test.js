@@ -20,7 +20,7 @@ function compile() {
 
 // Fresh jsdom + fresh react-dom per mount: react-dom caches globals at require time.
 // Returns the live dom so tests can dispatch clicks and re-read state after events.
-function mountDom(syncStub) {
+function mountDom(syncStub, workoutsOverride) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://ironvim.test/" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -29,9 +29,11 @@ function mountDom(syncStub) {
   global.requestAnimationFrame = (fn) => fn();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.ironvimSync = syncStub;
+  const ts = "2026-09-12T00:00:00.000Z";
+  const defaultWorkouts = [{ id:"local-workout", body:"PUSH\np 135x8", createdAt:ts, updatedAt:ts, revision:null, dirty:true }];
   dom.window.ironvimWorkouts = {
-    createWorkout: (body) => ({ id:"local-workout", body, createdAt:"2026-09-12T00:00:00.000Z", updatedAt:"2026-09-12T00:00:00.000Z", revision:null, dirty:true }),
-    loadLocalWorkouts: () => [{ id:"local-workout", body:"PUSH\np 135x8", createdAt:"2026-09-12T00:00:00.000Z", updatedAt:"2026-09-12T00:00:00.000Z", revision:null, dirty:true }],
+    createWorkout: (body) => ({ id:"local-workout", body, createdAt:ts, updatedAt:ts, revision:null, dirty:true }),
+    loadLocalWorkouts: () => workoutsOverride || defaultWorkouts,
     saveLocalWorkouts() {},
     mostRecentWorkout: (rows) => rows[0],
   };
@@ -394,15 +396,15 @@ test("workouts panel renders a light code-column table", () => {
   assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
 
-test("workout card: no header volume, edit button in brand blue, all-time row shows reps at max weight", () => {
+test("workout card: no header volume, plain edit button, all-time row shows reps at max weight", () => {
   const { dom } = mountDom({ getStatus: () => "signed-out", init: () => {} });
   const html = dom.window.document.getElementById("root").innerHTML;
   assert.ok(html.includes("135 lb max × 8"), "the all-time row includes the reps at the max weight");
   const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
   assert.ok(editBtn, "edit button present");
   assert.ok(!editBtn.parentElement.textContent.includes("lb"), "no volume label rides next to the edit button");
-  assert.strictEqual(editBtn.style.background, "rgb(118, 204, 224)", "edit stands out in brand blue");
-  assert.strictEqual(editBtn.style.color, "rgb(44, 46, 52)", "edit text rides dark on the brand fill");
+  assert.strictEqual(editBtn.style.background, "", "edit keeps the plain button fill until a style is chosen");
+  assert.strictEqual(editBtn.style.borderColor, "", "edit keeps the plain button border");
 });
 
 test("every sync status maps to a label", () => {
