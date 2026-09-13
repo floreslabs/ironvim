@@ -146,7 +146,6 @@ function hooksFor(localState) {
     applyRemote: (payload) => {
       applied.push(clone(payload));
       localState.workouts = payload.workouts;
-      localState.bodyweight = payload.bodyweight;
       localState.legend = payload.legend;
     },
     onStatus: (s, d) => statuses.push(d ? s + ":" + d : s),
@@ -173,7 +172,6 @@ const test = (name, fn) => tests.push([name, fn]);
 test("first sign-in uploads each local workout row", async () => {
   const local = {
     workouts: [localWorkout("push-1", "PUSH\np 135x8"), localWorkout("legs-1", "LEGS\nsq 225x5")],
-    bodyweight: "180",
     legend: { pd: { w: "Wide Bar" } },
   };
   const sync = reset(local, { remote: [], session: true });
@@ -181,7 +179,6 @@ test("first sign-in uploads each local workout row", async () => {
   assert.deepStrictEqual(remote.map((row) => row.body), ["PUSH\np 135x8", "LEGS\nsq 225x5"]);
   assert.deepStrictEqual(local.workouts.map((row) => row.revision), [1, 1]);
   assert.ok(local.workouts.every((row) => !row.dirty));
-  assert.strictEqual(local.bodyweight, "180");
   assert.deepStrictEqual(local.legend, { pd: { w: "Wide Bar" } });
   assert.strictEqual(last(statuses), "synced");
 });
@@ -189,7 +186,6 @@ test("first sign-in uploads each local workout row", async () => {
 test("clean local merges remote rows and adopts newest row data", async () => {
   const local = {
     workouts: [localWorkout("push-1", "old", 2, false)],
-    bodyweight: "175",
     legend: {},
   };
   const sync = reset(local, {
@@ -210,7 +206,6 @@ test("clean local merges remote rows and adopts newest row data", async () => {
 test("independently created local and remote rows merge without conflict", async () => {
   const local = {
     workouts: [localWorkout("local-new", "PUSH\np 135x8")],
-    bodyweight: "180",
     legend: {},
   };
   const sync = reset(local, { session: true, remote: [makeRemote("cloud-new", "LEGS\nsq 225x5", 3)] });
@@ -234,7 +229,6 @@ test("zero-row optimistic update fetches and reports the affected conflict", asy
 test("one stale workout reports a conflict without blocking another row", async () => {
   const local = {
     workouts: [localWorkout("push-1", "mine", 4), localWorkout("legs-1", "old legs", 2, false)],
-    bodyweight: "180",
     legend: {},
   };
   const sync = reset(local, {
@@ -253,7 +247,6 @@ test("one stale workout reports a conflict without blocking another row", async 
 test("conflict -> use cloud replaces only the affected row", async () => {
   const local = {
     workouts: [localWorkout("push-1", "mine", 4), localWorkout("legs-1", "keep", 8, false)],
-    bodyweight: "180",
     legend: {},
   };
   const sync = reset(local, { remote: [makeRemote("push-1", "cloud", 9)], session: true });
@@ -333,7 +326,6 @@ test("untouched local samples stay local when the account has no workouts", asyn
 test("network failure keeps dirty rows and retries them", async () => {
   const local = {
     workouts: [localWorkout("push-1", "PUSH\np 135x8", 4)],
-    bodyweight: "180",
     legend: {},
   };
   const sync = reset(local, { remote: [makeRemote("push-1", "old", 4)], session: true });
@@ -347,7 +339,7 @@ test("network failure keeps dirty rows and retries them", async () => {
   assert.strictEqual(local.workouts[0].dirty, false);
 });
 
-test("bodyweight and legend remain in the local sync payload", async () => {
+test("bodyweight no longer flows through the sync payload", async () => {
   const local = {
     workouts: [localWorkout("push-1", "PUSH\np 135x8")],
     bodyweight: "180",
@@ -355,10 +347,9 @@ test("bodyweight and legend remain in the local sync payload", async () => {
   };
   const sync = reset(local, { remote: [], session: true });
   await sync.init(hooksFor(local));
-  assert.strictEqual(local.bodyweight, "180");
   assert.deepStrictEqual(local.legend, { pd: { w: "Wide Bar" } });
-  assert.deepStrictEqual(last(applied).bodyweight, "180");
   assert.deepStrictEqual(last(applied).legend, { pd: { w: "Wide Bar" } });
+  assert.ok(!("bodyweight" in last(applied)), "sync payload carries no bodyweight, even if local state still has it");
 });
 
 test("no session -> signed-out, nothing read or written", async () => {

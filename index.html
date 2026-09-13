@@ -101,7 +101,7 @@ const SAMPLE_LOG = `PUSH 09-11
 p 135x8,8,6 "felt strong today
 idbp 60x10,10,8
 ct.r 60x12,12,10
-di bw+25x8,8,6
+di 25x8,8,6
 
 LEGS 09-12
 sq 225x5*5
@@ -167,7 +167,7 @@ function parseSets(str) {
   const segments = str.split(">");
   const sets = [];
   for (const seg of segments) {
-    const m = seg.match(/^(bw(?:[+-]\d+(?:\.\d+)?)?|\d+(?:\.\d+)?)x(.+)$/i);
+    const m = seg.match(/^(\d+(?:\.\d+)?)x(.+)$/i);
     if (!m) return null;
     const weightRaw = m[1];
     const repsParts = m[2].split(",");
@@ -226,16 +226,10 @@ function parseLog(text) {
   return sessions;
 }
 
-function resolveWeight(weightRaw, bodyweight) {
-  if (/^bw/i.test(weightRaw)) {
-    const mod = weightRaw.length > 2 ? parseFloat(weightRaw.slice(2)) : 0;
-    if (bodyweight === "" || bodyweight == null) return null;
-    return parseFloat(bodyweight) + mod;
-  }
+function resolveWeight(weightRaw) {
   return parseFloat(weightRaw);
 }
 function displayWeight(weightRaw) {
-  if (/^bw/i.test(weightRaw)) { const rest = weightRaw.slice(2); return rest ? `BW${rest}` : "BW"; }
   return `${weightRaw} lb`;
 }
 function describeExercise(entry, legend) {
@@ -318,7 +312,6 @@ function GrammarReference() {
       <div><div style={{ color:C.gray, marginBottom:3 }}>base</div>{Object.entries(BASE_LABELS).sort(([,a],[,b])=>a.localeCompare(b)).map(([k,v])=><div key={k}><span style={{color:C.blue}}>{k}</span> = {v}</div>)}</div>
       <div>
         <div style={{ color:C.gray, marginBottom:3 }}>tokens</div>
-        <div><span style={{color:C.blue}}>bw / bw+n / bw-n</span> = bodyweight, added, assisted</div>
         <div><span style={{color:C.blue}}>,</span> = next set, same weight</div>
         <div><span style={{color:C.blue}}>space</span> = next set, new weight</div>
         <div><span style={{color:C.blue}}>&gt;</span> = next set, new weight (old form, still parses)</div>
@@ -356,8 +349,8 @@ function Modal({ title, accent, onClose, children }) {
 }
 
 /* ---------------- workout editor syntax highlighting ---------------- */
-const EXERCISE_LINE_RE = /(?:bw[+-]?\d*|\d+(?:\.\d+)?)x\d+(?:\.\d+)?/i;
-const NUM_RE = /^(?:bw[+-]?\d*|\d+(?:\.\d+)?)$/i;
+const EXERCISE_LINE_RE = /\d+(?:\.\d+)?x\d+(?:\.\d+)?/i;
+const NUM_RE = /^\d+(?:\.\d+)?$/i;
 
 function highlightLog(text) {
   const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -380,7 +373,7 @@ function highlightLog(text) {
     if (variation) html += `<span style="color:${C.blue}">${esc(variation)}</span>`;
 
     let afterX = false, groupStart = true;
-    const setRe = /(bw[+-]?\d*|\d+(?:\.\d+)?|\D)/gi;
+    const setRe = /(\d+(?:\.\d+)?|\D)/gi;
     let match;
     while ((match = setRe.exec(rest)) !== null) {
       const tok = match[0];
@@ -488,7 +481,6 @@ function App() {
     ? workoutApi.loadLocalWorkouts(localStorage, parseLog, new Date())
     : [{ id:"local-workout", body:SAMPLE_LOG, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), revision:null, dirty:true }]);
   const [editingId, setEditingId] = useState(null);
-  const [bodyweight, setBodyweight] = useState(() => store.get("ironvim-logs-bodyweight", "180"));
   const [legend, setLegend] = useState(() => {
     const raw = store.get("ironvim-logs-legend", null);
     try { return withDefaultLegend(raw ? JSON.parse(raw) : DEFAULT_LEGEND); } catch(e) { return withDefaultLegend(DEFAULT_LEGEND); }
@@ -507,12 +499,11 @@ function App() {
   const applyRemote = useCallback((remote) => {
     skipNotify.current = true;
     setWorkouts(remote.workouts || []);
-    setBodyweight(remote.bodyweight == null ? "" : remote.bodyweight);
     setLegend(withDefaultLegend(remote.legend || {}));
   }, []);
 
   const sync = useSync({
-    local: { workouts, bodyweight, legend, untouched: workouts.length === 1 && workouts[0].body === SAMPLE_LOG },
+    local: { workouts, legend, untouched: workouts.length === 1 && workouts[0].body === SAMPLE_LOG },
     applyRemote,
   });
   const syncLabel = SYNC_LABELS[sync.status] || SYNC_LABELS["local-only"];
@@ -544,7 +535,6 @@ function App() {
   useEffect(() => {
     const h = setTimeout(() => {
       if (workoutApi) workoutApi.saveLocalWorkouts(localStorage, workouts);
-      store.set("ironvim-logs-bodyweight", bodyweight);
       store.set("ironvim-logs-legend", JSON.stringify(legend));
       setSaved(true);
       setTimeout(() => setSaved(false), 1200);
@@ -553,7 +543,7 @@ function App() {
       else if (window.ironvimSync) window.ironvimSync.notifyChange();
     }, 500);
     return () => clearTimeout(h);
-  }, [workouts, bodyweight, legend, workoutApi]);
+  }, [workouts, legend, workoutApi]);
 
   const sessions = useMemo(() => workouts.map((workout) => ({
     ...workout,
@@ -566,7 +556,7 @@ function App() {
       const label = describeExercise(entry, legend);
       if (!map[label]) map[label] = { maxWeight:null, volume:0, sets:0 };
       entry.sets.forEach((set) => {
-        const w = resolveWeight(set.weightRaw, bodyweight);
+        const w = resolveWeight(set.weightRaw);
         totalSets += 1; map[label].sets += 1;
         if (w != null) {
           const vol = w * set.reps;
@@ -577,7 +567,7 @@ function App() {
     })));
     const rows = Object.entries(map).map(([label,v]) => ({ label, ...v })).sort((a,b) => b.volume - a.volume);
     return { rows, totalVolume, totalSets, sessionCount: sessions.reduce((n, workout) => n + workout.parsed.length, 0) };
-  }, [sessions, bodyweight, legend]);
+  }, [sessions, legend]);
   const maxRowVolume = allTime.rows.length ? allTime.rows[0].volume : 1;
 
   const addLegendEntry = useCallback(() => {
@@ -626,7 +616,7 @@ function App() {
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
               {sessions.flatMap((workout) => workout.parsed.map((session, si) => {
                 const sessionVolume = session.entries.reduce((acc, entry) => acc + entry.sets.reduce((a,set) => {
-                  const w = resolveWeight(set.weightRaw, bodyweight); return a + (w != null ? w * set.reps : 0);
+                  const w = resolveWeight(set.weightRaw); return a + (w != null ? w * set.reps : 0);
                 }, 0), 0);
                 return (
                   <div key={`${workout.id}-${si}`} style={{ border:`1px solid ${C.bg3}`, borderRadius:6, overflow:"hidden" }}>
@@ -660,15 +650,6 @@ function App() {
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          <Panel title="SETTINGS" accent={C.yellow}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <label style={{ fontSize:13, color:C.gray }}>bodyweight (lb)</label>
-              <input className="gl-input" style={{ width:90 }} value={bodyweight}
-                onChange={(e) => setBodyweight(e.target.value.replace(/[^\d.]/g,""))}
-                inputMode="decimal" placeholder="180" />
-            </div>
-          </Panel>
-
           <Panel title="ALL-TIME SUMMARY" accent={C.orange}>
             <div style={{ display:"flex", gap:16, marginBottom:10, fontSize:12.5, flexWrap:"wrap" }}>
               <div><span style={{ color:C.gray }}>sessions </span><span style={{ color:C.green }}>{allTime.sessionCount}</span></div>

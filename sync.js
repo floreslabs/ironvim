@@ -86,7 +86,6 @@
     if (hooks.applyRemote) {
       hooks.applyRemote({
         workouts: workouts,
-        bodyweight: state.bodyweight,
         legend: state.legend || {},
       });
     }

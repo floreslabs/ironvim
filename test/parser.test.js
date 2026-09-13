@@ -33,9 +33,16 @@ test("padding around , * x is not a set break", () => {
   assert.strictEqual(sets("p 135 x 8"), "135x8");
 });
 
-test("bodyweight and superset forms survive", () => {
-  assert.strictEqual(sets("di bw+25x8,8,6"), "bw+25x8 bw+25x8 bw+25x6");
+test("numeric and superset forms survive; bw tokens do not", () => {
+  assert.strictEqual(sets("di 25x8,8,6"), "25x8 25x8 25x6");
   assert.strictEqual(sets("p 135x8 + c 60x10"), "135x8 | 60x10");
+  assert.strictEqual(sets("p bw+25x8"), null, "bw is not a valid weight token");
+});
+
+test("bw lines degrade to session headers", () => {
+  const parsed = G.parseLog("PUSH 09-11\np 135x8\n\nLEGS 09-12\ndi bw+25x8,8,6");
+  assert.deepStrictEqual(parsed.map((s) => s.title), ["PUSH 09-11", "LEGS 09-12", "di bw+25x8,8,6"]);
+  assert.deepStrictEqual(parsed.map((s) => s.entries.length), [1, 0, 0]);
 });
 
 test("a bare trailing number fails instead of silently merging digits", () => {

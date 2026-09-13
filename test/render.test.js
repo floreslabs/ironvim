@@ -115,7 +115,7 @@ test("sync reports the local state it will push", () => {
   mount({ getStatus: () => "signed-out", init: (h) => { captured = h.getLocal(); } });
   assert.ok(captured, "init received a getLocal hook");
   assert.ok(captured.workouts[0].body.includes("PUSH"), "local workout handed to sync");
-  assert.strictEqual(captured.bodyweight, "180");
+  assert.strictEqual(captured.bodyweight, undefined, "bodyweight dropped from the sync payload");
   assert.strictEqual(captured.untouched, false, "test workout is not the untouched sample");
   assert.ok(captured.legend.pd, "legend included");
 });
@@ -158,13 +158,13 @@ test("edit modal layers a colorized copy of the raw log behind the textarea", ()
   assert.ok(html.includes('color:#9ed072">8<'), "reps green");
 });
 
-test("highlight follows typing through variation, bw, sets, and comments", () => {
+test("highlight follows typing through variation, sets, comments, and bw removal", () => {
   const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
   const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
   act(() => { editBtn.dispatchEvent(new dom.window.Event("click", { bubbles: true })); });
   const ta = dom.window.document.querySelector("textarea");
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
-  const next = "SHIFT\nsh.b bw+25x12,12,10 \"wide grip";
+  const next = "SHIFT\nsh.rg 25x12,12,10 \"wide grip";
   act(() => {
     setter.call(ta, next);
     ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -175,10 +175,17 @@ test("highlight follows typing through variation, bw, sets, and comments", () =>
   const html = pre.innerHTML;
   assert.ok(html.includes('color:#f39660">SHIFT<'), "header stays orange");
   assert.ok(html.includes('color:#b39df3">sh<'), "base token purple");
-  assert.ok(html.includes('color:#76cce0">.b<'), "variation blue");
-  assert.ok(html.includes('color:#e7c664">bw+25<'), "bw weight yellow");
+  assert.ok(html.includes('color:#76cce0">.rg<'), "variation blue");
+  assert.ok(html.includes('color:#e7c664">25<'), "weight yellow");
   assert.ok(html.includes('color:#9ed072">12<') && html.includes('color:#9ed072">10<'), "reps green");
   assert.ok(html.includes("font-style:italic") && html.includes("wide grip"), "comment italicized");
+
+  const bw = "PUSH\np bw+25x8";
+  act(() => {
+    setter.call(ta, bw);
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  assert.ok(!pre.innerHTML.includes('color:#e7c664">bw'), "bw is not highlighted as a weight");
 });
 
 test("editor and highlight layer share exact layout metrics", () => {
