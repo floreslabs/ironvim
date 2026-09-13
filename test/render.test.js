@@ -396,15 +396,16 @@ test("workouts panel renders a light code-column table", () => {
   assert.ok(!html.includes("width:18"), "per-set index rail is gone");
 });
 
-test("workout card: no header volume, plain edit button, all-time row shows reps at max weight", () => {
+test("workout card: no header volume, outline-green edit button, all-time row shows reps at max weight", () => {
   const { dom } = mountDom({ getStatus: () => "signed-out", init: () => {} });
   const html = dom.window.document.getElementById("root").innerHTML;
   assert.ok(html.includes("135 lb max × 8"), "the all-time row includes the reps at the max weight");
   const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
   assert.ok(editBtn, "edit button present");
   assert.ok(!editBtn.parentElement.textContent.includes("lb"), "no volume label rides next to the edit button");
-  assert.strictEqual(editBtn.style.background, "", "edit keeps the plain button fill until a style is chosen");
-  assert.strictEqual(editBtn.style.borderColor, "", "edit keeps the plain button border");
+  assert.strictEqual(editBtn.style.borderColor, "rgb(158, 208, 114)", "edit wears the green outline like + new workout");
+  assert.strictEqual(editBtn.style.color, "rgb(158, 208, 114)", "edit text is green on the dark fill");
+  assert.strictEqual(editBtn.style.background, "", "edit keeps the default dark fill, outline only");
 });
 
 test("every sync status maps to a label", () => {
