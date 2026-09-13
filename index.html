@@ -423,6 +423,18 @@ function selectionLine(body, start, end) {
   return { lineStart, lineEnd, index: (body.slice(0, lineStart).match(/\n/g) || []).length };
 }
 
+/* A line that only has a code token (no weight×reps yet, or a broken set count)
+   still resolves to its exercise, so the label follows keystroke by keystroke
+   while typing. Headers and unknown tokens stay null. */
+function describeFirstToken(mainPart, legend) {
+  const token = mainPart.trim().split(/\s+/)[0];
+  if (!token) return null;
+  const [codePart, variationPart] = token.toLowerCase().split(".");
+  const decomposed = decompose(codePart);
+  if (!decomposed) return null;
+  return describeExercise({ code:token.toLowerCase(), ...decomposed, variation:variationPart || null, sets:[] }, legend);
+}
+
 /* Human-readable name of the exercise whose line intersects the selection
    [start, end]. */
 function exerciseLabelAtSelection(body, start, end, legend) {
@@ -433,7 +445,7 @@ function exerciseLabelAtSelection(body, start, end, legend) {
   const mainPart = (q === -1 ? line : line.slice(0, q)).trim();
   if (!mainPart) return null;
   const parsed = tryParseExerciseLine(mainPart);
-  return parsed ? describeExercise(parsed[0], legend) : null;
+  return parsed ? describeExercise(parsed[0], legend) : describeFirstToken(mainPart, legend);
 }
 
 function WorkoutModal({ workout, legend, onClose, onChange }) {

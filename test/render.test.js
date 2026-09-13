@@ -213,6 +213,16 @@ test("exercise label follows the selection range across a line", () => {
   assert.strictEqual(exerciseLabelAtSelection(body, 30, 40, {}), "Barbell Shrug (RG)", "selection inside the noted sh.rg line");
 });
 
+test("exercise label resolves from a bare code token before weights exist", () => {
+  const { exerciseLabelAtSelection } = exports_();
+  assert.strictEqual(exerciseLabelAtSelection("PUSH\npu", 7, 7, {}), "Bodyweight Pull-Up", "bare pu token labels");
+  assert.strictEqual(exerciseLabelAtSelection("PUSH\np", 6, 6, {}), "Barbell Press", "bare p token labels");
+  assert.strictEqual(exerciseLabelAtSelection("PUSH\nsh.b", 9, 9, { sh: { b: "Behind the Back" } }), "Barbell Shrug (Behind the Back)", "variation-only token labels");
+  assert.strictEqual(exerciseLabelAtSelection("PUSH\np 1", 8, 8, {}), "Barbell Press", "code token with a partial weight still labels");
+  assert.strictEqual(exerciseLabelAtSelection("PUSH\nqq", 7, 7, {}), null, "unknown token stays unlabeled");
+  assert.strictEqual(exerciseLabelAtSelection("PUSH 09-11", 6, 6, {}), null, "session header stays unlabeled");
+});
+
 test("edit modal status bar shows the exercise at the caret", () => {
   const { dom, act } = mountDom({ getStatus: () => "signed-out", init: () => {} });
   const editBtn = [...dom.window.document.querySelectorAll("button")].find((b) => b.textContent.trim() === "edit");
@@ -238,6 +248,20 @@ test("edit modal status bar shows the exercise at the caret", () => {
     ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   });
   assert.ok(labelEl.textContent.includes("Barbell Shrug (Behind the Back)"), "typing a shrug updates the label");
+
+  act(() => {
+    setter.call(ta, "PUSH\npu");
+    ta.setSelectionRange("PUSH\npu".length, "PUSH\npu".length);
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  assert.ok(labelEl.textContent.includes("Pull-Up"), "a bare pu token updates the label");
+
+  act(() => {
+    setter.call(ta, "PUSH\nqq");
+    ta.setSelectionRange("PUSH\nqq".length, "PUSH\nqq".length);
+    ta.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  assert.ok(labelEl.textContent.includes("—"), "an unknown token keeps the placeholder");
 });
 
 test("edit modal highlights the active row with the sonokai cursorline color", () => {
