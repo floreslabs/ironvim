@@ -94,7 +94,7 @@ test("l-prefixed leg codes are unaffected", () => {
 });
 
 test("rdl labels as a Romanian Deadlift", () => {
-  assert.strictEqual(label("rdl"), "Barbell Romanian Deadlift");
+  assert.strictEqual(label("rdl"), "Barbell Romanian Deadlift (RDL)");
   const parsed = G.parseLog("PUSH\nrdl 135x8");
   assert.strictEqual(parsed[0].entries[0].code, "rdl", "rdl parses as an exercise line");
 });
