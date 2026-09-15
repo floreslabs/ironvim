@@ -93,6 +93,12 @@ test("l-prefixed leg codes are unaffected", () => {
   assert.strictEqual(label("dp"), "Decline Barbell Press");
 });
 
+test("rdl labels as a Romanian Deadlift", () => {
+  assert.strictEqual(label("rdl"), "Barbell Romanian Deadlift");
+  const parsed = G.parseLog("PUSH\nrdl 135x8");
+  assert.strictEqual(parsed[0].entries[0].code, "rdl", "rdl parses as an exercise line");
+});
+
 test("legend migration moves retired keys and keeps custom entries", () => {
   const m = G.migrateLegend({ l: { w: "Wide Bar", z: "Custom" }, t: { r: "Rope" } });
   assert.deepStrictEqual(Object.keys(m).sort(), ["pd", "t"]);
